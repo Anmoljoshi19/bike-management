@@ -5,23 +5,31 @@ import pandas as pd
 from datetime import datetime
 import calendar
 
+import streamlit as st
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import pandas as pd
+
 # ==========================================
-# 1. CONNECTION
+# 1. CONNECTION (Direct File Method)
 # ==========================================
 def connect_sheet(sheet_name):
-    # Secrets se key uthana
-    creds_dict = dict(st.secrets["gcp_service_account"])
-    
-    # Ye step JWT error aur base64 error dono ko khatam kar dega
-    # Hum key ke ander ke slash-n ko asli newline mein badal rahe hain
-    fixed_key = creds_dict["private_key"].replace("\\n", "\n")
-    creds_dict["private_key"] = fixed_key
-    
+    # Scope define karein
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
     
-    return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+    try:
+        # Ye line direct aapke GitHub ki 'creds.json' file ko padhegi
+        creds = ServiceAccountCredentials.from_json_keyfile_name("creds.json", scope)
+        client = gspread.authorize(creds)
+        
+        # Sheet ka naam check kar lena: "Bike Check-In (Responses)" hi hona chahiye
+        return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+    except Exception as e:
+        st.error(f"Google Sheet se connect nahi ho pa raha: {e}")
+        st.info("Check karein ki GitHub par 'creds.json' file sahi hai ya nahi.")
+        return None
+
+# Page Configuration (Isko hamesha baaki code se upar rakhna)
 st.set_page_config(page_title="Munich Motorrad Management", layout="wide")
 
 # ==========================================
