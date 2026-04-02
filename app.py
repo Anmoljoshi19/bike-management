@@ -18,19 +18,23 @@ def connect_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
     try:
-        # File load karo
-        with open("creds.json") as f:
-            creds_dict = json.load(f)
+        # File read karna
+        with open("creds.json", "r") as f:
+            creds_info = json.load(f)
         
-        # Private key ke '\n' ko asli line break mein badlo (JWT fix)
-        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-        
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        # JWT error fix karne ke liye formatting
+        raw_key = creds_info.get("private_key", "")
+        creds_info["private_key"] = raw_key.replace("\\n", "\n")
+            
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
         client = gspread.authorize(creds)
+        
+        # Sheet open karna
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+        
     except Exception as e:
-        st.error(f"Google Sheet se connect nahi ho pa raha: {e}")
-        return None
+        st.error(f"Connection Error: {e}")
+        return NoneNone
 
 # Page Configuration (Isko hamesha baaki code se upar rakhna)
 st.set_page_config(page_title="Munich Motorrad Management", layout="wide")
