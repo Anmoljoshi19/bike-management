@@ -9,19 +9,19 @@ import calendar
 # 1. CONNECTION
 # ==========================================
 def connect_sheet(sheet_name):
-    # Secrets se dict uthana
+    # Secrets se key uthana
     creds_dict = dict(st.secrets["gcp_service_account"])
     
-    # Private key ko clean karna taaki base64 error na aaye
-    raw_key = creds_dict["private_key"]
-    # Agar key mein double backslash aa gaye hon toh unhe fix karna
-    creds_dict["private_key"] = raw_key.replace("\\n", "\n").strip()
+    # Ye step JWT error aur base64 error dono ko khatam kar dega
+    # Hum key ke ander ke slash-n ko asli newline mein badal rahe hain
+    fixed_key = creds_dict["private_key"].replace("\\n", "\n")
+    creds_dict["private_key"] = fixed_key
     
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
+    
     return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
-
 st.set_page_config(page_title="Munich Motorrad Management", layout="wide")
 
 # ==========================================
