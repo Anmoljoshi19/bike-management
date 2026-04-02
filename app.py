@@ -14,17 +14,20 @@ import time
 def connect_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        # File ki jagah direct Streamlit Secrets se data uthayega
-        creds_dict = dict(st.secrets["gcp_service_account"])
+        # Convert Secrets to dictionary
+        creds_dict = {}
+        for key in st.secrets["gcp_service_account"]:
+            creds_dict[key] = st.secrets["gcp_service_account"][key]
         
-        # Private key ke format ko fix karega
+        # Super important: Clean the private key
         if "private_key" in creds_dict:
+            # Ye line \n ko real newlines mein badal degi
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         
-        # Spreadsheet ka naam dhyaan se match karna
+        # Spreadsheet Name Check
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
     except Exception as e:
         st.error(f"🔴 Connection Failed: {str(e)}")
