@@ -1,13 +1,39 @@
-{
-  "type": "service_account",
-  "project_id": "myworkshopapp",
-  "private_key_id": "0946515cc7964b7beec684f36b12b35bb3d44c19",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDsSuR9a7HQ8r7D\nhbQ3i1G7cSZdWA0zM30eCK6rbQEfX0lazH25rhzYYR1cAkmR4WX6I80CD6z6cVuO\nWzMqpMgUJuQPIiYeVT+mizqTTPmxd6w60kL+s4D+GmFWStHX4iNjMD08vQffWKRL\nFWpINqP42gaDgT7kgBWfzoTV4lF9q47KnrHIXc6l7d9LbdciM9Nt347jNx+21qJH\n80ySyolOUUPKs/fDV/aG8fOb1G6lIUmMF4BRcCWbXBHiUwnqzmJMbuH5LdX2bxxK\nzvvU7/opF6/j+Ivm7ZceVj8Kf2DIkbOprEwYxbOF8YfTDdZdorb5DbwfuiJQAonM\nE3GTf58FAgMBAAECggEAESP1oyt2wKN7Nw+x3P2cNi6lC8xhWL95af5TPVgw5qew\n2IdQ73Ez4nZY/N2lnJFvJlAGhQnCEIC8lX0EHynI4b1YeciOX1Drxxb+bsT8r+Tw\nd2vdNECtMMGVIf9XbYOX8ZAEQS2tLoRtloy9IvPjvR+DrXJor4ajCu6eMC20n5r4\nlF84y/BTatv3R++sU+8P5Bde5QzS78nnZQxmUbUeRpcUpiE1X5ZV9TxQbTxnkgal\ny6XGIOe3qpra5y6jwzBu0OsqzoNeAywGesjjWfAoz3hOcsixyCEZVgVQ16JRJFA/\nt2cVUDl87Ga4yxo9jXtAhBnGG2cbdIclOJPNGfzwmQKBgQD8/gAnTJ2R/FoyUmC7\nS/0q0SR9EKfPmNyyAytuRHrkc5a5QPCFvwThYzYBbfLXwGNOBC4k9lc2poA28ysV\nX1YNg+1HU+RESCSh3OqLQRgJdNWVY15mSjJyT0IFzfVhC8euGhcIdjWUuwoi6Ir3\ndeZnevmByqxaIwZXBRUEvmQ0pwKBgQDvGhC/FepGLwyBk1UJjJSU11vPkKnOvOT7\nM+ISv9sdYpJNg/SVMQkCo3NEfD28dQv3UJPbKGErJIqRsnBHKLMiakVOvDfFPVAY\n6xKHCsTx6KW6sw0jhYdDAw/6Euentq7hSP9PFp59dz20TK1EzaEQF7/jdrK68suj\nxK1YYYtIcwKBgF7DNYOC6zKXd6GJwbnmSLoVBLnj1zenZmM3VLlE5VNVCIvziyRN\n3KIf60a1zFSMN6YtYqttqlVKIJR0mRq0TyNY2zPwdHwvGamXejMW+s3v+WCvi9h8\ylCO54gNEXB8XRsVorMEtCU1uiJBQGxYuSjhozu+krhgjitiN/FC733ZAoGBAI/c\nlwbiILtpw5STGS9Nrnh/u3YADKufbAbZCMVPOn9Lt8t8AcViY5F61vf16Q9jPXfo\nu425lf1nVxiizHuEOYQTfPAKv2OlqHPVvKgUCruix1S2NsmQpfnj9dD5XvjCKibS\nzQrBCUtkW3QITph/QNF1+LbbzF4/h9dZlxL+XdeRAoGAGYXPU+p+6sBopnEHl79c\nVoJGFwUAD4JQ0lUSwJagsXadDTIHfavgdSr2nxhfDnyMcEc74gj8kA/jOGuAstz7\nq44bJiEwC9p8HeBVpsrj38rHNwQrW8P0I7OUjaTX8LTG1EYkzEOqdGyW35p8FQw/\n6na/myxgjquuEip9jLlwBlU=\n-----END PRIVATE KEY-----\n",
-  "client_email": "bmw-munich-motorrad-workshop@myworkshopapp.iam.gserviceaccount.com",
-  "client_id": "112430553803970505013",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/bmw-munich-motorrad-workshop%40myworkshopapp.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}
+[gcp_service_account]
+type = "service_account"
+project_id = "myworkshopapp"
+private_key_id = "a40fcb10b591d0719ddec42897a18b410026c1e0"
+private_key = """-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDACTYhgo2lghtP
+AOx1BBSkVB+eJhNt7PNblEqGKPRuN1mUP85Mn0s8U7n6iHNsQ+7I8aBfthXBvc4t
+qtYu6Wj5Yv1YDvQE867v5q0cnokC+RVM+Wj4NgqnvhmrhPTqVXZh7XWoG5jbcroP
+zMEqudwDAXRLZLyUGN+RfK0AnsO/Zta1QnsM5PhElnWHqPsFeTu65MHXssRFW89l
+ClscfkDJEb9LebiUP4ljsgElSC+T6LCUXATUoSNKb+XqfCVnIwNX5LAJyL1P41ld
+azV7CqKIqNNXtD8MXyGHF2tnbFn8roUjM0HueEzrHR92XJpk92+wwMH8ZiYLPFCW
+cpjeT/zHAgMBAAECggEALcUERdBb+kqcP6Q0t18VnGUAdC0XDGghSH57lKZGO86t
+ZwweG10MDYDXHsNO30sBqpsMYkN/xAF9Fp1VFzFCd84EG+zUdCmwVDVipSOT/EVp
+skLvpdkbiQdiDuNNjFx6LrTuCfcp44PgnMtsbsaFjaHXGfEUkSesgXx5r2Anv4JV
+GE2h6GvqP3Ky9OD71lMrj4t0ALPVZ3xMIn7eljacFLQuWbY7Q5CbhCHURmiNFBYS
+4E44op/GjhDaMEoYhBpCBXYbP8nunGfboprxKmWmwlmDSnjSz4G8coXS00aDkSWB
+28VW/Ejqw137SpzhiBdCZmVES5Ve9BDcUzrotLQQwQKBgQDzrsF9LCnt1UufVObG
+/b6zmYjAZnL5A5gXWeqSRlMSCbPOEddAyxL50VBVzas4chPGHuRW9WYcNLxKjEiO
+B8T29LCxjwkAQeOHUHpHpHB0OH10oh7qzhc/0tUptXs1x9jSPfUE/5+Mpmi5Rp88
+C0yautIcZlq1Vwpc8Ga06G5OqQKBgQDJviZbEPNgQl7KzFwNwZlUOvFaEqc1VtiS
+f8QvBa2Jr7HOHwJL1U3g+0Apu3Fg3Xg8PCcYIEGhLdYV8NkLPcG5ylJ3ZqtPmg3Z
+WkGRYYlx5wL1wLnji6EKNs+kE/5FlJiM6sNWzSbpGxBVADVFGEtGSBSgMk4iu6vy
+ZsvobLlF7wKBgBe0LSAm9qEq+WMzWAuNTUqdKb9Fd/OfFOFYnsfBzXzYssPd2ml0
+F5FzefQOwJQKDMBd6upGjrs5qgM6aChguxkmrjVna4G55w8Xlf14EnRLtnBtAMLo
+nbzyHHrMi8yxFF2NEIZxt3TBKU6+KHh0yIC6A88VNc49mOxzVSbhZT7mZAoGBAKZz
+NMI+Ig9xszQvmGPhL9jHKQrgCQWBOf7lW8BQNvY698DQ5Nwcibzuj+netZTuJZ3N
+I5RMSNnrL4+6v9j+gy//Njs9gmqS+Io0ZZTFnNlVeKO696Q+OAhtYLRHqqtOBu99
+Yt3jNg9uPPNk0I7JlJHQNvRVjRIrNZsyJVsHGXYRAoGBAKihowSY/7dHrAoSsAKY
+yF8g7UDMStaw0AdjCMk+i00ON9CInf4q5NfvykfP1Pm3oCfXCpmqvlainXt2/DIi
+eUrvvIC+Q4i0fwpj6M+E2kO/ymdUHSGc4RUMZZmbbpG3rbwLWzhGbzHXfBkD4VvJ
+Mx/KzlqR8+SMWfC/otC57uBo
+-----END PRIVATE KEY-----
+"""
+client_email = "bmw-munich-motorrad-workshop@myworkshopapp.iam.gserviceaccount.com"
+client_id = "112430553803970505013"
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/bmw-munich-motorrad-workshop%40myworkshopapp.iam.gserviceaccount.com"
