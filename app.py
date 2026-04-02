@@ -9,8 +9,9 @@ import calendar
 # 1. CONNECTION
 # ==========================================
 def connect_sheet(sheet_name):
+    creds_dict = st.secrets["gcp_service_account"]
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("creds.json", scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
 
