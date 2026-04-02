@@ -14,28 +14,20 @@ import time
 def connect_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        if not os.path.exists("creds.json"):
-            st.error("❌ 'creds.json' file aapke folder mein nahi mili!")
-            return None
-            
-        # File ko raw read karke manually parse kar rahe hain taaki \n error na aaye
-        with open("creds.json", "r", encoding='utf-8') as f:
-            raw_content = f.read()
+        # File ki jagah direct Streamlit Secrets se data uthayega
+        creds_dict = dict(st.secrets["gcp_service_account"])
         
-        # Fixing backslashes and cleaning JSON
-        creds_info = json.loads(raw_content, strict=False)
-        
-        if "private_key" in creds_info:
-            # Ye line \n ko asli newline mein convert karegi bina error ke
-            creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
+        # Private key ke format ko fix karega
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         
-        # Spreadsheet opening
+        # Spreadsheet ka naam dhyaan se match karna
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
     except Exception as e:
-        st.error(f"🔴 Connection Error: {str(e)}")
+        st.error(f"🔴 Connection Failed: {str(e)}")
         return None
 
 # Page Setup
