@@ -11,8 +11,11 @@ import calendar
 def connect_sheet(sheet_name):
     # Secrets se dict uthana
     creds_dict = dict(st.secrets["gcp_service_account"])
-    # Private key ki formatting fix karna (JWT error bhagane ke liye)
-    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    
+    # Private key ko clean karna taaki base64 error na aaye
+    raw_key = creds_dict["private_key"]
+    # Agar key mein double backslash aa gaye hon toh unhe fix karna
+    creds_dict["private_key"] = raw_key.replace("\\n", "\n").strip()
     
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
