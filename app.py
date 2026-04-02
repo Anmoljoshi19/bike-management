@@ -18,23 +18,31 @@ def connect_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
     try:
-        # File read karna
+        # 1. File load karein
         with open("creds.json", "r") as f:
             creds_info = json.load(f)
         
-        # JWT error fix karne ke liye formatting
-        raw_key = creds_info.get("private_key", "")
-        creds_info["private_key"] = raw_key.replace("\\n", "\n")
+        # 2. Private key ko saaf karein (JWT Fix)
+        # Pehle strip() se aage-piche ke space hatayein, phir \n fix karein
+        key = creds_info["private_key"].strip()
+        creds_info["private_key"] = key.replace("\\n", "\n")
             
+        # 3. Authorize
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
         client = gspread.authorize(creds)
         
-        # Sheet open karna
+        # 4. Sheet open karein
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
         
     except Exception as e:
-        st.error(f"Connection Error: {e}")
-        return NoneNone
+        st.error(f"🔴 Connection Error: {e}")
+        return None
+
+# --- IMPORTANT ---
+# Jahan aap connect_sheet use kar rahe hain, wahan check karein
+sheet = connect_sheet("Sheet1") # Apni worksheet ka naam dalo
+if sheet is None:
+    st.stop() # Agar connection nahi hua toh app yahi ruk jaye
 
 # Page Configuration (Isko hamesha baaki code se upar rakhna)
 st.set_page_config(page_title="Munich Motorrad Management", layout="wide")
