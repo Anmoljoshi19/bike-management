@@ -14,19 +14,22 @@ import pandas as pd
 # 1. CONNECTION (Direct File Method)
 # ==========================================
 def connect_sheet(sheet_name):
-    # Scope define karein
+    import json
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
     try:
-        # Ye line direct aapke GitHub ki 'creds.json' file ko padhegi
-        creds = ServiceAccountCredentials.from_json_keyfile_name("creds.json", scope)
-        client = gspread.authorize(creds)
+        # File load karo
+        with open("creds.json") as f:
+            creds_dict = json.load(f)
         
-        # Sheet ka naam check kar lena: "Bike Check-In (Responses)" hi hona chahiye
+        # Private key ke '\n' ko asli line break mein badlo (JWT fix)
+        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
     except Exception as e:
         st.error(f"Google Sheet se connect nahi ho pa raha: {e}")
-        st.info("Check karein ki GitHub par 'creds.json' file sahi hai ya nahi.")
         return None
 
 # Page Configuration (Isko hamesha baaki code se upar rakhna)
