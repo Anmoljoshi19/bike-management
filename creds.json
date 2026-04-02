@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "myworkshopapp",
+  "private_key_id": "0946515cc7964b7beec684f36b12b35bb3d44c19",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDsSuR9a7HQ8r7D\nhbQ3i1G7cSZdWA0zM30eCK6rbQEfX0lazH25rhzYYR1cAkmR4WX6I80CD6z6cVuO\nWzMqpMgUJuQPIiYeVT+mizqTTPmxd6w60kL+s4D+GmFWStHX4iNjMD08vQffWKRL\nFWpINqP42gaDgT7kgBWfzoTV4lF9q47KnrHIXc6l7d9LbdciM9Nt347jNx+21qJH\n80ySyolOUUPKs/fDV/aG8fOb1G6lIUmMF4BRcCWbXBHiUwnqzmJMbuH5LdX2bxxK\nzvvU7/opF6/j+Ivm7ZceVj8Kf2DIkbOprEwYxbOF8YfTDdZdorb5DbwfuiJQAonM\nE3GTf58FAgMBAAECggEAESP1oyt2wKN7Nw+x3P2cNi6lC8xhWL95af5TPVgw5qew\n2IdQ73Ez4nZY/N2lnJFvJlAGhQnCEIC8lX0EHynI4b1YeciOX1Drxxb+bsT8r+Tw\nd2vdNECtMMGVIf9XbYOX8ZAEQS2tLoRtloy9IvPjvR+DrXJor4ajCu6eMC20n5r4\nlF84y/BTatv3R++sU+8P5Bde5QzS78nnZQxmUbUeRpcUpiE1X5ZV9TxQbTxnkgal\ny6XGIOe3qpra5y6jwzBu0OsqzoNeAywGesjjWfAoz3hOcsixyCEZVgVQ16JRJFA/\nt2cVUDl87Ga4yxo9jXtAhBnGG2cbdIclOJPNGfzwmQKBgQD8/gAnTJ2R/FoyUmC7\nS/0q0SR9EKfPmNyyAytuRHrkc5a5QPCFvwThYzYBbfLXwGNOBC4k9lc2poA28ysV\nX1YNg+1HU+RESCSh3OqLQRgJdNWVY15mSjJyT0IFzfVhC8euGhcIdjWUuwoi6Ir3\ndeZnevmByqxaIwZXBRUEvmQ0pwKBgQDvGhC/FepGLwyBk1UJjJSU11vPkKnOvOT7\nM+ISv9sdYpJNg/SVMQkCo3NEfD28dQv3UJPbKGErJIqRsnBHKLMiakVOvDfFPVAY\n6xKHCsTx6KW6sw0jhYdDAw/6Euentq7hSP9PFp59dz20TK1EzaEQF7/jdrK68suj\nxK1YYYtIcwKBgF7DNYOC6zKXd6GJwbnmSLoVBLnj1zenZmM3VLlE5VNVCIvziyRN\n3KIf60a1zFSMN6YtYqttqlVKIJR0mRq0TyNY2zPwdHwvGamXejMW+s3v+WCvi9h8\nylCO54gNEXB8XRsVorMEtCU1uiJBQGxYuSjhozu+krhgjitiN/FC733ZAoGBAI/c\nlwbiILtpw5STGS9Nrnh/u3YADKufbAbZCMVPOn9Lt8t8AcViY5F61vf16Q9jPXfo\nu425lf1nVxiizHuEOYQTfPAKv2OlqHPVvKgUCruix1S2NsmQpfnj9dD5XvjCKibS\nzQrBCUtkW3QITph/QNF1+LbbzF4/h9dZlxL+XdeRAoGAGYXPU+p+6sBopnEHl79c\nVoJGFwUAD4JQ0lUSwJagsXadDTIHfavgdSr2nxhfDnyMcEc74gj8kA/jOGuAstz7\nq44bJiEwC9p8HeBVpsrj38rHNwQrW8P0I7OUjaTX8LTG1EYkzEOqdGyW35p8FQw/\n6na/myxgjquuEip9jLlwBlU=\n-----END PRIVATE KEY-----\n",
+  "client_email": "bmw-munich-motorrad-workshop@myworkshopapp.iam.gserviceaccount.com",
+  "client_id": "112430553803970505013",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/bmw-munich-motorrad-workshop%40myworkshopapp.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
