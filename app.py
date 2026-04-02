@@ -14,21 +14,29 @@ import time
 def connect_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        # Convert Secrets to dictionary
-        creds_dict = {}
-        for key in st.secrets["gcp_service_account"]:
-            creds_dict[key] = st.secrets["gcp_service_account"][key]
+        # Step 1: Get single-line key from Secrets
+        raw_key = st.secrets["raw_key"]
         
-        # Super important: Clean the private key
-        if "private_key" in creds_dict:
-            # Ye line \n ko real newlines mein badal degi
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-            
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        # Step 2: Build credentials dictionary
+        creds_info = {
+            "type": "service_account",
+            "project_id": "myworkshopapp",
+            "private_key_id": "a40fcb10b591d0719ddec42897a18b410026c1e0",
+            "private_key": raw_key.replace("\\n", "\n"),
+            "client_email": "bmw-munich-motorrad-workshop@myworkshopapp.iam.gserviceaccount.com",
+            "client_id": "112430553803970505013",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/bmw-munich-motorrad-workshop%40myworkshopapp.iam.gserviceaccount.com"
+        }
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
         client = gspread.authorize(creds)
         
-        # Spreadsheet Name Check
+        # Sheet ka naam check karna
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+        
     except Exception as e:
         st.error(f"🔴 Connection Failed: {str(e)}")
         return None
