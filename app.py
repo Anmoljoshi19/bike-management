@@ -9,7 +9,11 @@ import calendar
 # 1. CONNECTION
 # ==========================================
 def connect_sheet(sheet_name):
-    creds_dict = st.secrets["gcp_service_account"]
+    # Secrets se dict uthana
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    # Private key ki formatting fix karna (JWT error bhagane ke liye)
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
