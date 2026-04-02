@@ -12,28 +12,21 @@ import time
 # 1. DATABASE CONNECTION (LOCAL PC FIX)
 # ==========================================
 def connect_sheet(sheet_name):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
     try:
-        # Step 1: Get single-line key from Secrets
-        raw_key = st.secrets["raw_key"]
-        
-        # Step 2: Build credentials dictionary
-        creds_info = {
-            "type": "service_account",
-            "project_id": "myworkshopapp",
-            "private_key_id": "a40fcb10b591d0719ddec42897a18b410026c1e0",
-            "private_key": raw_key.replace("\\n", "\n"),
-            "client_email": "bmw-munich-motorrad-workshop@myworkshopapp.iam.gserviceaccount.com",
-            "client_id": "112430553803970505013",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/bmw-munich-motorrad-workshop%40myworkshopapp.iam.gserviceaccount.com"
-        }
-        
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            st.secrets["gcp_service_account"], scope
+        )
         client = gspread.authorize(creds)
-        
+
+        return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+
+    except Exception as e:
+        st.error(f"🔴 Connection Failed: {str(e)}")
+        return None
         # Sheet ka naam check karna
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
         
