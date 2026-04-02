@@ -4,88 +4,75 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from datetime import datetime
 import calendar
-
-import streamlit as st
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import pandas as pd
+import json
+import os
+import time
 
 # ==========================================
-# 1. CONNECTION (Direct File Method)
+# 1. DATABASE CONNECTION (LOCAL PC FIX)
 # ==========================================
 def connect_sheet(sheet_name):
-    import json
-    import os
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    
     try:
-        # Check if file exists
         if not os.path.exists("creds.json"):
-            st.error("creds.json file nahi mili!")
+            st.error("❌ 'creds.json' file aapke folder mein nahi mili!")
             return None
             
-        with open("creds.json", "r") as f:
-            creds_info = json.load(f)
-            
-        # JWT Fix: replace double backslash with actual newline
-        creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
+        # File ko raw read karke manually parse kar rahe hain taaki \n error na aaye
+        with open("creds.json", "r", encoding='utf-8') as f:
+            raw_content = f.read()
         
+        # Fixing backslashes and cleaning JSON
+        creds_info = json.loads(raw_content, strict=False)
+        
+        if "private_key" in creds_info:
+            # Ye line \n ko asli newline mein convert karegi bina error ke
+            creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
+            
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
         client = gspread.authorize(creds)
+        
+        # Spreadsheet opening
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
     except Exception as e:
-        st.error(f"Connection Error: {e}")
+        st.error(f"🔴 Connection Error: {str(e)}")
         return None
 
-# Page Configuration (Isko hamesha baaki code se upar rakhna)
-st.set_page_config(page_title="Munich Motorrad Management", layout="wide")
+# Page Setup
+st.set_page_config(page_title="Munich Motorrad Local", page_icon="🏍️", layout="wide")
 
 # ==========================================
-# 2. GLOBAL CSS (FIXED)
+# 2. PRO CSS (OFFLINE OPTIMIZED)
 # ==========================================
 st.markdown("""
     <style>
-    /* BLUE TABS STYLE */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 12px;
-        background-color: #e9ecef;
-        padding: 10px;
-        border-radius: 12px;
+    .stTabs [data-baseweb="tab-list"] { gap: 15px; background-color: #f0f2f6; padding: 10px; border-radius: 12px; }
+    .stTabs [data-baseweb="tab"] { 
+        height: 55px; background-color: white; border: 2px solid #0056b3 !important; 
+        border-radius: 10px; color: #0056b3; font-weight: bold; padding: 0 25px;
     }
-    .stTabs [data-baseweb="tab"] {
-        height: 55px;
-        background-color: white;
-        border: 2.5px solid #0056b3 !important;
-        border-radius: 10px;
-        padding: 0 25px;
-        color: #0056b3;
-        font-weight: bold;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #0056b3 !important;
-        color: white !important;
-    }
-
-    /* SAVE BUTTON STYLING */
+    .stTabs [aria-selected="true"] { background-color: #0056b3 !important; color: white !important; }
+    
+    /* Workshop Card Styling */
+    .stExpander { border: 1px solid #ddd !important; border-radius: 12px !important; margin-bottom: 15px !important; }
+    
+    /* Big Update Button */
     button[key^="up_"] {
-        height: 75px !important;
-        background-color: #0056b3 !important;
-        color: white !important;
-        font-size: 24px !important;
-        font-weight: 900 !important;
-        border-radius: 12px !important;
+        height: 75px !important; background-color: #0056b3 !important; color: white !important;
+        font-size: 22px !important; font-weight: 900 !important; border-radius: 15px !important;
     }
-
-    /* EXPANDER BORDER */
-    .stExpander {
-        border: 1px solid #ddd !important;
-        border-radius: 10px !important;
-        margin-bottom: 10px !important;
+    
+    /* Calendar Grid Scroll Fix */
+    [data-testid="stVerticalBlockBorderWrapper"] > div > div {
+        min-height: 250px !important; max-height: 300px !important; overflow-y: auto !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-tab_ws, tab_app = st.tabs(["🔧 Workshop Manager", "📅 Appointment Calendar"])
+st.title("🏁 Munich Motorrad Workshop Management")
+
+
+tab_ws, tab_app = st.tabs(["🔧 WORKSHOP MANAGER", "📅 APPOINTMENTS"])
 
 # ------------------------------------------
 # TAB 1: WORKSHOP MANAGER
