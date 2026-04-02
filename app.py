@@ -33,29 +33,53 @@ st.set_page_config(page_title="Munich Motorrad Local", page_icon="🏍️", layo
 # 2. PRO CSS (OFFLINE OPTIMIZED)
 # ==========================================
 st.markdown("""
-    <style>
-    .stTabs [data-baseweb="tab-list"] { gap: 15px; background-color: #f0f2f6; padding: 10px; border-radius: 12px; }
-    .stTabs [data-baseweb="tab"] { 
-        height: 55px; background-color: white; border: 2px solid #0056b3 !important; 
-        border-radius: 10px; color: #0056b3; font-weight: bold; padding: 0 25px;
-    }
-    .stTabs [aria-selected="true"] { background-color: #0056b3 !important; color: white !important; }
-    
-    /* Workshop Card Styling */
-    .stExpander { border: 1px solid #ddd !important; border-radius: 12px !important; margin-bottom: 15px !important; }
-    
-    /* Big Update Button */
-    button[key^="up_"] {
-        height: 75px !important; background-color: #0056b3 !important; color: white !important;
-        font-size: 22px !important; font-weight: 900 !important; border-radius: 15px !important;
-    }
-    
-    /* Calendar Grid Scroll Fix */
-    [data-testid="stVerticalBlockBorderWrapper"] > div > div {
-        min-height: 250px !important; max-height: 300px !important; overflow-y: auto !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+<style>
+
+/* MOBILE CALENDAR FIX */
+[data-testid="stVerticalBlockBorderWrapper"] > div > div {
+    min-height: 180px !important;
+    max-height: 220px !important;
+    overflow-y: auto !important;
+    padding: 5px !important;
+}
+
+/* Button text wrap (important for phone) */
+div.stButton > button p {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    font-size: 10px !important;
+    font-weight: bold !important;
+    line-height: 1.2 !important;
+}
+
+/* Button size mobile friendly */
+div.stButton > button {
+    padding: 8px !important;
+    border-radius: 10px !important;
+}
+
+/* Calendar day box */
+[data-testid="stVerticalBlock"] {
+    gap: 4px !important;
+}
+
+/* Horizontal scroll for mobile */
+section.main > div {
+    overflow-x: auto;
+}
+
+/* Day title */
+.calendar-day {
+    font-size: 13px;
+}
+
+/* Improve tap feel */
+button {
+    touch-action: manipulation;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 st.title("🏁 Munich Motorrad Workshop Management")
 
