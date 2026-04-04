@@ -283,7 +283,6 @@ with tab_app:
 # ------------------------------------------
 with tab_call:
     try:
-        @st.cache_data(ttl=60)
         dash_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
         
         @st.cache_data(ttl=60)
