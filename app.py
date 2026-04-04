@@ -564,12 +564,12 @@ with tab_parts:
                 .stTable { border: 1px solid #333 !important; }
                 .stTable td, .stTable th { border: 1px solid #333 !important; font-size: 10px !important; padding: 2px !important; }
                 
-                /* TAB 1 SPECIFIC COLORS - DO NOT REMOVE */
-                th:nth-child(1) { background-color: #f2f2f2 !important; }
-                th:nth-child(n+2):nth-child(-n+6) { background-color: #ffff00 !important; }
-                th:nth-child(n+7):nth-child(-n+11) { background-color: #fce4d6 !important; }
-                th:nth-child(n+12):nth-child(-n+15) { background-color: #ed7d31 !important; color: white !important; }
-                th:nth-child(n+16) { background-color: #92d050 !important; }
+                /* FIX: .stTable lagaya hai taaki Tab 4 mein color na faile */
+                .stTable th:nth-child(1) { background-color: #f2f2f2 !important; color: black !important; }
+                .stTable th:nth-child(n+2):nth-child(-n+6) { background-color: #ffff00 !important; color: black !important; }
+                .stTable th:nth-child(n+7):nth-child(-n+11) { background-color: #fce4d6 !important; color: black !important; }
+                .stTable th:nth-child(n+12):nth-child(-n+15) { background-color: #ed7d31 !important; color: white !important; }
+                .stTable th:nth-child(n+16) { background-color: #92d050 !important; color: black !important; }
                 .gap-table th:last-child { background-color: #fce4d6 !important; }
             </style>
         """, unsafe_allow_html=True)
