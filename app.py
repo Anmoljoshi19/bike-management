@@ -5,32 +5,47 @@ import pandas as pd
 from datetime import datetime
 import calendar
 import json
+import os
+import time
 
 # ==========================================
-# 1. DATABASE CONNECTION (STREAMLIT SECRETS)
+# 1. MAIN SHEET CONNECTION (WORKSHOP + APPOINTMENT)
 # ==========================================
 def connect_sheet(sheet_name):
-    # Sheet ki ID jo URL mein /d/ ke baad hoti hai
-    SHEET_ID = "1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas" 
-    
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        # Secrets se login
-        creds_info = st.secrets["gcp_service_account"]
-        
-        # Private key formatting fix
-        creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
-        
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        # MAGIC FIX: Secrets ko dict mein convert kiya taaki error na aaye
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        
-        # ID se open karne par 100% connection banta hai
-        return client.open_by_key(SHEET_ID).worksheet(sheet_name)
-        
+
+        return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+
     except Exception as e:
-        st.error(f"🔴 Connection Error: {sheet_name} | {str(e)}")
+        st.error(f"🔴 Connection Error: {sheet_name} | {e}")
         return None
 
+# ==========================================
+# SERVICE CALLING SHEET
+# ==========================================
+def connect_sheet_by_url(sheet_url, sheet_name):
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+
+        return client.open_by_url(sheet_url).worksheet(sheet_name)
+
+    except Exception as e:
+        st.error(f"🔴 Connection Error: {str(e)}")
+        return None
 
 # Page Setup
 st.set_page_config(page_title="Munich Motorrad Local", page_icon="🏍️", layout="wide")
@@ -65,7 +80,6 @@ st.markdown("""
 
 st.title("🏁 Munich Motorrad Workshop Management")
 
-
 tab_ws, tab_app, tab_call, tab_kpi, tab_parts = st.tabs([
     "🔧 WORKSHOP MANAGER", 
     "📅 APPOINTMENTS", 
@@ -83,10 +97,7 @@ with tab_ws:
         ws_data = ws_sheet.get_all_values()
         
         if len(ws_data) > 1:
-            # Header extract karein
             header = ws_data[0]
-            
-            # Saare rows ko original index ke saath list mein daalein
             all_items = []
             for i, r in enumerate(ws_data[1:]):
                 all_items.append({
@@ -98,11 +109,8 @@ with tab_ws:
             
             with sub1:
                 s_o = st.text_input("🔍 Search Open JCs", key="ws_so")
-                
-                # Filter out Delivered bikes
                 open_list = [item for item in all_items if len(item['data']) > 18 and item['data'][18] != "Delivered"]
                 
-                # --- ARRANGE LOGIC (HOLD -> PROCESS -> COMPLETE) ---
                 def workshop_sort(item):
                     status = item['data'][18].strip() if len(item['data']) > 18 else ""
                     if status == "On Hold": return 1
@@ -117,7 +125,6 @@ with tab_ws:
                     idx = item['row_idx']
                     stat = r[18].strip() if len(r) > 18 else "In Process"
                     
-                    # Status visuals (Emoji for Title)
                     if stat == "On Hold":
                         display_stat = f"🔴 {stat}"
                         title_color = "#FF4B4B"
@@ -129,9 +136,7 @@ with tab_ws:
                         title_color = "#FF8C00"
 
                     if s_o.lower() in str(r).lower():
-                        # Display Card
                         with st.expander(f"{r[1]} | {r[5]} | {display_stat}"):
-                            # Colored Heading inside
                             st.markdown(f"<h2 style='color:{title_color}; margin-top:0;'>{display_stat}</h2>", unsafe_allow_html=True)
                             
                             c1, c2, c3 = st.columns(3)
@@ -162,14 +167,12 @@ with tab_ws:
 
             with sub2:
                 s_h = st.text_input("🔍 Search Delivered History", key="ws_sh")
-                # Filter Delivered bikes
                 history_list = [item for item in all_items if len(item['data']) > 18 and item['data'][18] == "Delivered"]
                 
                 for item in history_list:
                     r = item['data']
                     if s_h.lower() in str(r).lower():
                         with st.expander(f"✅ {r[1]} | {r[5]} | Delivered"):
-                            # Pura data History section mein (245 lines goal)
                             hc1, hc2, hc3 = st.columns(3)
                             with hc1:
                                 st.markdown(f"**👤 Customer:** {r[1]}")
@@ -187,7 +190,6 @@ with tab_ws:
 
     except Exception as e:
         st.error(f"Workshop Load Error: {e}")
-
 # ------------------------------------------
 # TAB 2: APPOINTMENT CALENDAR (NO HIGHLIGHT)
 # ------------------------------------------
@@ -197,25 +199,20 @@ with tab_app:
         app_vals = app_sheet.get_all_values()
         
         if len(app_vals) > 1:
-            # Data Load & Cleaning
             df = pd.DataFrame([{"row": i+2, "N": r[1], "D": r[3], "M": r[4], "P": r[6], "R": r[7] if len(r)>7 else ""} for i, r in enumerate(app_vals[1:])])
             df['D'] = pd.to_datetime(df['D'], errors='coerce')
             df = df.dropna(subset=['D'])
 
-            # 1. Year & Month Selection
             cy, cm = st.columns(2)
             y = cy.selectbox("Year", [2025, 2026], index=1)
             mn = cm.selectbox("Month", list(calendar.month_name)[1:], index=datetime.now().month-1)
             midx = list(calendar.month_name).index(mn)
 
-            # --- 2. SMART STATS LOGIC ---
             today = datetime.now().date()
             month_df = df[(df['D'].dt.month == midx) & (df['D'].dt.year == y)].copy()
             
             total_apps = len(month_df)
             reported_apps = len(month_df[month_df['R'].str.contains("Bike Reported", na=False)])
-            
-            # PENDING: Sirf past dates jinka reporting nahi hua
             pending_apps = len(month_df[
                 (month_df['D'].dt.date < today) & 
                 (~month_df['R'].str.contains("Bike Reported", na=False))
@@ -242,7 +239,6 @@ with tab_app:
             
             st.markdown("---")
 
-            # 3. CALENDAR UI
             st.markdown("""<style>
                 [data-testid="stVerticalBlockBorderWrapper"] > div > div { min-height: 250px !important; max-height: 250px !important; overflow-y: auto !important; }
                 div.stButton > button p { white-space: normal !important; word-wrap: break-word !important; font-size: 11px !important; font-weight: bold !important; }
@@ -258,20 +254,18 @@ with tab_app:
                 for i, day in enumerate(week):
                     if day != 0:
                         with cols[i].container(border=True):
-                            # Yellow highlight wala part hata diya hai
                             st.markdown(f"<div style='text-align:right; font-weight:bold; color:#555;'>{day}</div>", unsafe_allow_html=True)
                             
                             day_data = month_df[month_df['D'].dt.day == day]
                             for _, row in day_data.iterrows():
                                 is_rep = "Bike Reported" in str(row['R'])
                                 
-                                # Border Color Logic
                                 if is_rep:
-                                    b_c = "#28a745" # Green (Done)
+                                    b_c = "#28a745"
                                 elif row['D'].date() < today:
-                                    b_c = "#d9534f" # Red (Missed)
+                                    b_c = "#d9534f"
                                 else:
-                                    b_c = "#007bff" # Blue (Upcoming/Today)
+                                    b_c = "#007bff"
                                 
                                 st.markdown(f"""<style>div.stButton > button[key="trig_{row['row']}"] {{ border: 2.5px solid {b_c} !important; min-height: 60px !important; margin-bottom: 5px !important; }}</style>""", unsafe_allow_html=True)
                                 
@@ -289,7 +283,6 @@ with tab_app:
 # ------------------------------------------
 with tab_call:
     try:
-        # 1. LOAD DATA
         @st.cache_data(ttl=60)
         def load_service_calling_data():
             dash_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
@@ -301,48 +294,33 @@ with tab_call:
 
         stats_data, call_sheet, raw_data = load_service_calling_data()
 
-        # 2. DATA CLEANING
         df_raw = pd.DataFrame(raw_data[1:], columns=raw_data[0])
         df = df_raw.loc[:, ~df_raw.columns.duplicated()].copy() 
         df["__row"] = df.index + 2
         
-        # 3. GLOBAL FILTERS
         target_col = "Sold by Other Dealer" 
         mask = (df["Status"].str.lower().str.contains("pending", na=False)) & \
                (df[target_col].fillna("").str.strip() == "")
         df_filtered = df[mask]
 
-        # 4. UI STYLING (Bada Box aur Bold Text)
         st.markdown("""<style>
-            /* Button height bada kiya aur text alignment center */
             div.stButton > button { 
-                width: 100%; 
-                height: 110px !important; 
-                border-radius: 15px; 
-                background-color: white; 
-                border: 1px solid #ddd; 
-                transition: 0.3s;
-                white-space: pre-wrap !important; /* Line break enable karne ke liye */
+                width: 100%; height: 110px !important; border-radius: 15px; 
+                background-color: white; border: 1px solid #ddd; transition: 0.3s;
+                white-space: pre-wrap !important;
             }
-            /* Hover Effect */
             div.stButton > button:hover { border: 2px solid #ff8c00 !important; background-color: #fffaf5 !important; }
-            
-            /* Button ke andar ka text style */
             div.stButton > button p {
-                font-size: 16px !important;
-                font-weight: 800 !important;
-                line-height: 1.3 !important;
-                color: #333;
+                font-size: 16px !important; font-weight: 800 !important;
+                line-height: 1.3 !important; color: #333;
             }
         </style>""", unsafe_allow_html=True)
 
         t1, t2 = st.tabs(["🏙️ INDORE CALLING", "🌍 OUTSTATION CALLING"])
 
-        # 5. RENDER ENGINE
         def render_dashboard(df_part, mode):
             mode_idx = 0 if mode == "Indore" else 1
             
-            # --- SUMMARY TILE ---
             total_pending = stats_data[6][mode_idx] if len(stats_data) > 6 else "0"
             st.markdown(f"""
                 <div style="background-color:#ff8c00; padding:15px; border-radius:15px; text-align:center; margin-bottom:20px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
@@ -351,7 +329,6 @@ with tab_call:
                 </div>
             """, unsafe_allow_html=True)
 
-            # --- SERVICE SELECTOR TILES (FIXED FORMATTING) ---
             cols = st.columns(6)
             svc_key = f"svc_sel_{mode}"
             if svc_key not in st.session_state: st.session_state[svc_key] = "All"
@@ -360,11 +337,8 @@ with tab_call:
             for i, label in enumerate(labels, 1):
                 count_val = stats_data[i-1][mode_idx] if len(stats_data) > i-1 else "0"
                 is_sel = st.session_state[svc_key] == str(i)
-                
-                # Naya Format: Line break ke saath
                 display_text = f"{label} Service\nPending: {count_val}"
                 
-                # Selection Color (Green)
                 if is_sel:
                     st.markdown(f"<style>div.stButton > button[key*='btn_{mode}_{i}'] {{ background-color: #1E7E34 !important; border: 2px solid #FFD700 !important; }} div.stButton > button[key*='btn_{mode}_{i}'] p {{ color: white !important; }}</style>", unsafe_allow_html=True)
                 
@@ -372,36 +346,29 @@ with tab_call:
                     st.session_state[svc_key] = "All" if is_sel else str(i)
                     st.rerun()
 
-            # --- DATA FILTERING ---
             current = st.session_state[svc_key]
             final_df = df_part if current == "All" else df_part[df_part["Service Count"].astype(str).str.startswith(current)]
 
-            # --- DATA TABLE ---
             if final_df.empty:
                 st.info(f"No {current if current != 'All' else ''} pending calls.")
             else:
                 st.write(f"📋 Showing **{len(final_df)}** records")
                 edited = st.data_editor(
                     final_df, 
-                    use_container_width=True, 
-                    height=500,
+                    use_container_width=True, height=500,
                     disabled=[c for c in final_df.columns if c not in ["Remark"]],
                     column_config={"__row": None, "Remark": st.column_config.TextColumn(width="large")},
                     key=f"ed_{mode}_{current}"
                 )
 
-                # --- INSTANT SAVE ---
                 for r in range(len(final_df)):
                     if edited.iloc[r]["Remark"] != final_df.iloc[r]["Remark"]:
                         row_to_update = int(edited.iloc[r]["__row"])
                         call_sheet.update(f"T{row_to_update}", [[edited.iloc[r]["Remark"]]])
                         st.toast(f"Saved Row {row_to_update} ✅")
 
-        # 6. EXECUTION
-        with t1:
-            render_dashboard(df_filtered[df_filtered["City"].str.lower() == "indore"], "Indore")
-        with t2:
-            render_dashboard(df_filtered[df_filtered["City"].str.lower() != "indore"], "Outstation")
+        with t1: render_dashboard(df_filtered[df_filtered["City"].str.lower() == "indore"], "Indore")
+        with t2: render_dashboard(df_filtered[df_filtered["City"].str.lower() != "indore"], "Outstation")
 
     except Exception as e:
         st.error(f"🔴 System Error: {str(e)}")
@@ -426,7 +393,6 @@ with tab_kpi:
             neg_scores = [safe_float(kpi_data[i][5]) for i in [13, 14] if i < len(kpi_data)]
             total_sum = sum(main_scores) + sum(neg_scores)
 
-            # --- TOP TILE (COMPACT) ---
             st.markdown(f"""
                 <div style="background-color:#0056b3; padding:5px 10px; border-radius:10px; text-align:center; border: 2px solid #FFD700; margin-bottom:10px;">
                     <p style="color:white; margin:0; font-size:14px; font-weight:bold;">🏆 TOTAL KPI SCORE (Q2)</p>
@@ -436,7 +402,6 @@ with tab_kpi:
 
             s1, s2 = st.tabs(["🎯 SCORE BOARD", "📊 QUARTERLY STATS"])
 
-            # --- TAB 1: SCORE BOARD (WITH COLUMN I) ---
             with s1:
                 st.subheader("Quarter 2: Achievement Score")
                 main_html = """<table style="width:100%; border-collapse: collapse; color: black; margin-bottom:20px;">
@@ -492,7 +457,6 @@ with tab_kpi:
                 neg_html += "</table>"
                 st.markdown(neg_html, unsafe_allow_html=True)
 
-            # --- TAB 2: QUARTERLY STATS ---
             with s2:
                 st.subheader("📊 Q2 STATS")
                 stats_html = """<table style="width:100%; border-collapse: collapse; color: black;">
@@ -513,8 +477,7 @@ with tab_kpi:
                                       f'<td style="padding:8px; border:1px solid #ddd;">{r[16]}</td>' \
                                       f'<td style="padding:8px; border:1px solid #ddd;">{r[17]}</td>' \
                                       f'</tr>'
-                    except: 
-                        pass
+                    except: pass
                 stats_html += "</table>"
                 st.markdown(stats_html, unsafe_allow_html=True)
 
@@ -524,8 +487,7 @@ with tab_kpi:
                 try:
                     jc_needed = kpi_data[1][25]
                     st.markdown(f'<div style="background-color:#fff3cd; padding:8px 15px; border-radius:8px; border: 1px solid #ffa000; display: inline-block; margin-bottom:15px;"><span style="color:#856404; font-weight:bold;">🎯 JC NEEDED TO CLOSE: </span><span style="color:#000; font-size:18px; font-weight:bold;">{jc_needed}</span></div>', unsafe_allow_html=True)
-                except: 
-                    pass
+                except: pass
 
                 growth_rows = [kpi_data[i] for i in range(2, 16) if i < len(kpi_data) and kpi_data[i][21].strip()]
                 
@@ -551,7 +513,6 @@ with tab_kpi:
 
     except Exception as e:
         st.error(f"🔴 KPI Error: {e}")
-
 # ==========================================
 # MAIN TAB 5: PARTS (STABLE VERSION)
 # ==========================================
@@ -625,10 +586,6 @@ with tab_parts:
         # --- SUB TABS ---
         p_sub1, p_sub2, p_sub3 = st.tabs(["📊 Purchase & Sale", "🔄 Dealer Transfer", "📦 Inventory"])
 
-
-
-
-
         with p_sub1:
             def excel_style(row):
                 m = str(row.iloc[0]).upper().strip()
@@ -684,11 +641,6 @@ with tab_parts:
                     st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown('</div>', unsafe_allow_html=True)
-
-
-
-
-
 
         with p_sub2:
             try:
