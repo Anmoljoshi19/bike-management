@@ -418,7 +418,7 @@ with tab_kpi:
                         <th style="padding: 8px; border: 1px solid #ddd;">Score Achieved</th>
                         <th style="padding: 8px; border: 1px solid #ddd;">Scoring Criteria</th>
                         <th style="padding: 8px; border: 1px solid #ddd;">Score</th>
-                        <th style="padding: 8px; border: 1px solid #ddd;">Planning (I)</th>
+                        <th style="padding: 8px; border: 1px solid #ddd;">Planning</th>
                     </tr>"""
                 for r in kpi_data[2:11]:
                     if len(r) > 8 and r[0].strip():
@@ -445,7 +445,7 @@ with tab_kpi:
                         <th style="padding: 8px; border: 1px solid #ddd;">Score Achieved</th>
                         <th style="padding: 8px; border: 1px solid #ddd;">Scoring Criteria</th>
                         <th style="padding: 8px; border: 1px solid #ddd;">Score</th>
-                        <th style="padding: 8px; border: 1px solid #ddd;">Planning (I)</th>
+                        <th style="padding: 8px; border: 1px solid #ddd;">Planning</th>
                     </tr>"""
                 for i in [13, 14]:
                     if i < len(kpi_data):
