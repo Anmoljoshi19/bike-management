@@ -78,7 +78,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏁 Munich Motorrad Workshop Management")
+st.markdown("""
+    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg" width="55">
+        <h1 style="margin: 0; color: #111;">Munich Motorrad Workshop Management</h1>
+    </div>
+""", unsafe_allow_html=True)
 
 tab_ws, tab_app, tab_call, tab_kpi, tab_parts = st.tabs([
     "🔧 WORKSHOP MANAGER", 
