@@ -241,3 +241,119 @@ with tab_app:
                     else:
                         cols[i].markdown("<div style='height:100px; opacity:0.2;'></div>", unsafe_allow_html=True)
     except Exception as e: st.error(f"Calendar Error: {e}")
+
+# ------------------------------------------
+# TAB 3: SERVICE CALLING (FIXED UI & TEXT)
+# ------------------------------------------
+with tab_call:
+    try:
+        # 1. LOAD DATA (URL aur Connection Setup)
+        @st.cache_data(ttl=60)
+        def load_service_calling_data():
+            # URL fix for Service Sheet
+            dash_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
+            dash_sheet = connect_sheet_by_url(dash_url, "Dashboard")
+            main_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
+            
+            if not dash_sheet or not main_sheet:
+                return None, None, None
+                
+            stats = dash_sheet.get("F2:G8")
+            raw_data = main_sheet.get_all_values()
+            return stats, main_sheet, raw_data
+
+        stats_data, call_sheet, raw_data = load_service_calling_data()
+
+        if raw_data:
+            # 2. DATA CLEANING
+            df_raw = pd.DataFrame(raw_data[1:], columns=raw_data[0])
+            df = df_raw.loc[:, ~df_raw.columns.duplicated()].copy() 
+            df["__row"] = df.index + 2
+            
+            # 3. GLOBAL FILTERS (Pending aur Blank 'Sold by Other Dealer')
+            target_col = "Sold by Other Dealer" 
+            mask = (df["Status"].str.lower().str.contains("pending", na=False)) & \
+                   (df[target_col].fillna("").str.strip() == "")
+            df_filtered = df[mask]
+
+            # 4. UI STYLING (Bada Box aur Bold Text)
+            st.markdown("""<style>
+                div.stButton > button { 
+                    width: 100%; 
+                    height: 110px !important; 
+                    border-radius: 15px; 
+                    background-color: white; 
+                    border: 1px solid #ddd; 
+                    transition: 0.3s;
+                    white-space: pre-wrap !important;
+                }
+                div.stButton > button:hover { border: 2px solid #ff8c00 !important; background-color: #fffaf5 !important; }
+                div.stButton > button p {
+                    font-size: 16px !important;
+                    font-weight: 800 !important;
+                    line-height: 1.3 !important;
+                    color: #333;
+                }
+            </style>""", unsafe_allow_html=True)
+
+            t1, t2 = st.tabs(["🏙️ INDORE CALLING", "🌍 OUTSTATION CALLING"])
+
+            # 5. RENDER ENGINE (Har city ke liye alag filter)
+            def render_dashboard(df_part, mode):
+                mode_idx = 0 if mode == "Indore" else 1
+                
+                # --- SUMMARY TILE ---
+                total_pending = stats_data[6][mode_idx] if len(stats_data) > 6 else "0"
+                st.markdown(f"""
+                    <div style="background-color:#ff8c00; padding:15px; border-radius:15px; text-align:center; margin-bottom:20px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                        <p style="color:white; margin:0; font-size:14px; font-weight:bold;">{mode.upper()} TOTAL PENDING</p>
+                        <h1 style="color:white; margin:0; font-size:40px;">{total_pending}</h1>
+                    </div>
+                """, unsafe_allow_html=True)
+
+                # --- SERVICE SELECTOR TILES ---
+                cols = st.columns(6)
+                svc_key = f"svc_sel_{mode}"
+                if svc_key not in st.session_state: st.session_state[svc_key] = "All"
+
+                labels = ["1st", "2nd", "3rd", "4th", "5th", "6th"]
+                for i, label in enumerate(labels, 1):
+                    count_val = stats_data[i-1][mode_idx] if len(stats_data) > i-1 else "0"
+                    is_sel = st.session_state[svc_key] == str(i)
+                    display_text = f"{label} Service\nPending: {count_val}"
+                    
+                    if is_sel:
+                        st.markdown(f"<style>div.stButton > button[key*='btn_{mode}_{i}'] {{ background-color: #1E7E34 !important; border: 2px solid #FFD700 !important; }} div.stButton > button[key*='btn_{mode}_{i}'] p {{ color: white !important; }}</style>", unsafe_allow_html=True)
+                    
+                    if cols[i-1].button(display_text, key=f"btn_{mode}_{i}"):
+                        st.session_state[svc_key] = "All" if is_sel else str(i)
+                        st.rerun()
+
+                # --- DATA TABLE ---
+                current = st.session_state[svc_key]
+                final_df = df_part if current == "All" else df_part[df_part["Service Count"].astype(str).str.startswith(current)]
+
+                if final_df.empty:
+                    st.info(f"No {current if current != 'All' else ''} pending calls.")
+                else:
+                    st.write(f"📋 Showing **{len(final_df)}** records")
+                    edited = st.data_editor(
+                        final_df, 
+                        use_container_width=True, 
+                        height=500,
+                        disabled=[c for c in final_df.columns if c not in ["Remark"]],
+                        column_config={"__row": None, "Remark": st.column_config.TextColumn(width="large")},
+                        key=f"ed_{mode}_{current}"
+                    )
+
+                    # --- INSTANT SAVE ---
+                    for r in range(len(final_df)):
+                        if edited.iloc[r]["Remark"] != final_df.iloc[r]["Remark"]:
+                            row_to_update = int(edited.iloc[r]["__row"])
+                            call_sheet.update(f"T{row_to_update}", [[edited.iloc[r]["Remark"]]])
+                            st.toast(f"Saved Row {row_to_update} ✅")
+        else:
+            st.warning("Data load nahi ho pa raha hai. Sheet URL aur Permissions check karein.")
+
+    except Exception as e:
+        st.error(f"🔴 System Error: {str(e)}")
