@@ -84,7 +84,13 @@ button {
 st.title("🏁 Munich Motorrad Workshop Management")
 
 
-tab_ws, tab_app = st.tabs(["🔧 WORKSHOP MANAGER", "📅 APPOINTMENTS"])
+tab_ws, tab_app, tab_call, tab_kpi, tab_parts = st.tabs([
+    "🔧 WORKSHOP MANAGER", 
+    "📅 APPOINTMENTS", 
+    "📞 SERVICE CALLING", 
+    "📊 KPI DASHBOARD",
+    "📦 PARTS"
+])
 
 # ------------------------------------------
 # TAB 1: WORKSHOP MANAGER
