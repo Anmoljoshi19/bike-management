@@ -27,7 +27,27 @@ def connect_sheet(sheet_name):
     except Exception as e:
         st.error(f"🔴 Connection Error: {sheet_name}")
         return None
+def connect_sheet(sheet_name):
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    try:
+        # Hamesha secrets use karein, file nahi
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+        client = gspread.authorize(creds)
+        return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+    except Exception as e:
+        st.error(f"🔴 Connection Error (Name): {sheet_name}")
+        return None
 
+def connect_sheet_by_url(sheet_url, sheet_name):
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    try:
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+        client = gspread.authorize(creds)
+        # Nayi sheets ke liye url wala method
+        return client.open_by_url(sheet_url).worksheet(sheet_name)
+    except Exception as e:
+        st.error(f"🔴 Connection Error (URL): {sheet_name} - {str(e)}")
+        return None
 
 # ==========================================
 # SERVICE CALLING SHEET
