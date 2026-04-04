@@ -284,15 +284,21 @@ with tab_app:
 with tab_call:
     try:
         @st.cache_data(ttl=60)
+        dash_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
+        
+        @st.cache_data(ttl=60)
         def load_service_calling_data():
-            dash_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
             dash_sheet = connect_sheet_by_url(dash_url, "Dashboard")
             main_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
             stats = dash_sheet.get("F2:G8")
             raw_data = main_sheet.get_all_values()
-            return stats, main_sheet, raw_data
+            # FIX: Sirf data return kar rahe hain, connection object nahi
+            return stats, raw_data
 
-        stats_data, call_sheet, raw_data = load_service_calling_data()
+        stats_data, raw_data = load_service_calling_data()
+        
+        # FIX: Connection object ko cache ke bahar rakha hai taaki wo expire na ho
+        call_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
 
         df_raw = pd.DataFrame(raw_data[1:], columns=raw_data[0])
         df = df_raw.loc[:, ~df_raw.columns.duplicated()].copy() 
