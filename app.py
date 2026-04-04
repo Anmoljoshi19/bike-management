@@ -688,11 +688,16 @@ with tab_parts:
                     st.markdown("#### **🗓️ Month-wise Customer Transfer Totals**")
                     summary_dt = df_dt.groupby(['Month', 'Customer'])['Amount'].sum().reset_index()
                     summary_dt['SortOrder'] = pd.to_datetime(summary_dt['Month'], format='%B %Y')
+                    
+                    # Sort karne ke baad index reset kiya taaki S.No. sahi aaye (1, 2, 3...)
                     summary_dt = summary_dt.sort_values(['SortOrder', 'Amount'], ascending=[True, False]).drop('SortOrder', axis=1)
+                    summary_dt = summary_dt.reset_index(drop=True)
+                    summary_dt.index = summary_dt.index + 1 
+                    
                     summary_dt['Amount'] = summary_dt['Amount'].apply(lambda x: f"₹ {x:,.2f}")
                     
                     # Is table ki heading bhi Bold aur Yellow
-                    st.table(summary_dt.style.hide(axis='index').set_table_styles([
+                    st.table(summary_dt.style.set_table_styles([
                         {'selector': 'th', 'props': [('background-color', '#ffff00'), ('color', 'black'), ('font-weight', 'bold')]}
                     ]).set_properties(**{
                         'background-color': '#deeaf6',
