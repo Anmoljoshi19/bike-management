@@ -12,17 +12,22 @@ import json
 def connect_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        # Yahan hum creds.json ki jagah secrets use kar rahe hain
         creds_info = st.secrets["gcp_service_account"]
         
-        # Ye line important hai private key ke format ke liye
-        creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
-        
+        # YE LINE SABSE IMPORTANT HAI: 
+        # Agar key mein line breaks hain toh ye unhe clean kar dega
+        if "private_key" in creds_info:
+            creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
+
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
         client = gspread.authorize(creds)
+        
+        # Yahan try kar ki direct ID se open ho (taki naam ka lafda na rahe)
+        # Teri main sheet ki ID yahan daal de agar naam se nahi mil rahi
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+        
     except Exception as e:
-        st.error(f"🔴 Connection Error: {sheet_name}")
+        st.error(f"🔴 Connection Error: {sheet_name} | {str(e)}")
         return None
 
 def connect_sheet_by_url(sheet_url, sheet_name):
