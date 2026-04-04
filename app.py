@@ -10,37 +10,25 @@ import json
 # 1. DATABASE CONNECTION (STREAMLIT SECRETS)
 # ==========================================
 def connect_sheet(sheet_name):
+    # Sheet ki ID jo URL mein /d/ ke baad hoti hai
+    SHEET_ID = "1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas" 
+    
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
+        # Secrets se login
         creds_info = st.secrets["gcp_service_account"]
         
-        # YE LINE SABSE IMPORTANT HAI: 
-        # Agar key mein line breaks hain toh ye unhe clean kar dega
-        if "private_key" in creds_info:
-            creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
-
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
-        client = gspread.authorize(creds)
-        
-        # Yahan try kar ki direct ID se open ho (taki naam ka lafda na rahe)
-        # Teri main sheet ki ID yahan daal de agar naam se nahi mil rahi
-        return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
-        
-    except Exception as e:
-        st.error(f"🔴 Connection Error: {sheet_name} | {str(e)}")
-        return None
-
-def connect_sheet_by_url(sheet_url, sheet_name):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    try:
-        creds_info = st.secrets["gcp_service_account"]
+        # Private key formatting fix
         creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
         
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
         client = gspread.authorize(creds)
-        return client.open_by_url(sheet_url).worksheet(sheet_name)
+        
+        # ID se open karne par 100% connection banta hai
+        return client.open_by_key(SHEET_ID).worksheet(sheet_name)
+        
     except Exception as e:
-        st.error(f"🔴 Connection Error: {str(e)}")
+        st.error(f"🔴 Connection Error: {sheet_name} | {str(e)}")
         return None
 
 
