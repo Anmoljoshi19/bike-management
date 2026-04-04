@@ -284,26 +284,23 @@ with tab_app:
         st.error(f"Calendar Error: {e}")
 
 # ------------------------------------------
-# TAB 3: SERVICE CALLING (FIXED UI & TEXT)
+# TAB 3: SERVICE CALLING (BUG FIXED)
 # ------------------------------------------
 with tab_call:
     try:
         dash_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
-        
+
+        # 1. LOAD DATA (SIRF DATA CACHE HOGA, CONNECTION NAHI)
         @st.cache_data(ttl=60)
-        def load_service_calling_data():
-            dash_sheet = connect_sheet_by_url(dash_url, "Dashboard")
-            main_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
-            stats = dash_sheet.get("F2:G8")
-            raw_data = main_sheet.get_all_values()
-            # FIX: Sirf data return kar rahe hain, connection object nahi
-            return stats, raw_data
+        def load_calling_data():
+            d_sheet = connect_sheet_by_url(dash_url, "Dashboard")
+            m_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
+            # Connection return nahi kar rahe, sirf data return kar rahe hain
+            return d_sheet.get("F2:G8"), m_sheet.get_all_values()
 
-        stats_data, raw_data = load_service_calling_data()
-        
-        # FIX: Connection object ko cache ke bahar rakha hai taaki wo expire na ho
-        call_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
+        stats_data, raw_data = load_calling_data()
 
+        # 2. DATA CLEANING
         df_raw = pd.DataFrame(raw_data[1:], columns=raw_data[0])
         df = df_raw.loc[:, ~df_raw.columns.duplicated()].copy() 
         df["__row"] = df.index + 2
@@ -313,6 +310,7 @@ with tab_call:
                (df[target_col].fillna("").str.strip() == "")
         df_filtered = df[mask]
 
+        # 3. UI STYLING (Green Button Setup)
         st.markdown("""<style>
             div.stButton > button { 
                 width: 100%; height: 110px !important; border-radius: 15px; 
@@ -323,6 +321,13 @@ with tab_call:
             div.stButton > button p {
                 font-size: 16px !important; font-weight: 800 !important;
                 line-height: 1.3 !important; color: #333;
+            }
+            div.stButton > button[kind="primary"] {
+                background-color: #28a745 !important;
+                border: 3px solid #1e7e34 !important;
+            }
+            div.stButton > button[kind="primary"] p {
+                color: white !important;
             }
         </style>""", unsafe_allow_html=True)
 
@@ -349,10 +354,10 @@ with tab_call:
                 is_sel = st.session_state[svc_key] == str(i)
                 display_text = f"{label} Service\nPending: {count_val}"
                 
-                if is_sel:
-                    st.markdown(f"<style>div.stButton > button[key*='btn_{mode}_{i}'] {{ background-color: #1E7E34 !important; border: 2px solid #FFD700 !important; }} div.stButton > button[key*='btn_{mode}_{i}'] p {{ color: white !important; }}</style>", unsafe_allow_html=True)
+                # Green selection logic
+                btn_type = "primary" if is_sel else "secondary"
                 
-                if cols[i-1].button(display_text, key=f"btn_{mode}_{i}"):
+                if cols[i-1].button(display_text, key=f"btn_{mode}_{i}", type=btn_type):
                     st.session_state[svc_key] = "All" if is_sel else str(i)
                     st.rerun()
 
@@ -371,11 +376,29 @@ with tab_call:
                     key=f"ed_{mode}_{current}"
                 )
 
-                for r in range(len(final_df)):
-                    if edited.iloc[r]["Remark"] != final_df.iloc[r]["Remark"]:
-                        row_to_update = int(edited.iloc[r]["__row"])
-                        call_sheet.update(f"T{row_to_update}", [[edited.iloc[r]["Remark"]]])
-                        st.toast(f"Saved Row {row_to_update} ✅")
+                # --- 🚀 MANUAL SAVE (NO LAG, FRESH CONNECTION) ---
+                if st.button("💾 SAVE ALL CHANGES", key=f"save_btn_{mode}_{current}", type="primary"):
+                    updates_count = 0
+                    
+                    with st.spinner("⏳ Saving to Google Sheets..."):
+                        # 🔥 SABSE BADA FIX: Yahan ekdum fresh connection open kar rahe hain
+                        fresh_call_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
+                        
+                        for r in range(len(final_df)):
+                            if edited.iloc[r]["Remark"] != final_df.iloc[r]["Remark"]:
+                                row_to_update = int(edited.iloc[r]["__row"])
+                                new_remark = edited.iloc[r]["Remark"]
+                                
+                                fresh_call_sheet.update(f"T{row_to_update}", [[new_remark]])
+                                updates_count += 1
+                    
+                    if updates_count > 0:
+                        st.success(f"✅ {updates_count} records updated successfully!")
+                        load_calling_data.clear() 
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.info("No new changes detected to save.")
 
         with t1: render_dashboard(df_filtered[df_filtered["City"].str.lower() == "indore"], "Indore")
         with t2: render_dashboard(df_filtered[df_filtered["City"].str.lower() != "indore"], "Outstation")
