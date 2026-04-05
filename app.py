@@ -103,7 +103,10 @@ with tab_ws:
         ws_data = ws_sheet.get_all_values()
         
         if len(ws_data) > 1:
+            # Header extract karein
             header = ws_data[0]
+            
+            # Saare rows ko original index ke saath list mein daalein
             all_items = []
             for i, r in enumerate(ws_data[1:]):
                 all_items.append({
@@ -115,10 +118,13 @@ with tab_ws:
             
             with sub1:
                 s_o = st.text_input("🔍 Search Open JCs", key="ws_so")
-                open_list = [item for item in all_items if len(item['data']) > 18 and item['data'][18] != "Delivered"]
                 
+                # Filter out Delivered bikes (Status ab index 19 par hai)
+                open_list = [item for item in all_items if len(item['data']) > 19 and item['data'][19] != "Delivered"]
+                
+                # --- ARRANGE LOGIC (HOLD -> PROCESS -> COMPLETE) ---
                 def workshop_sort(item):
-                    status = item['data'][18].strip() if len(item['data']) > 18 else ""
+                    status = item['data'][19].strip() if len(item['data']) > 19 else ""
                     if status == "On Hold": return 1
                     if status == "In Process": return 2
                     if status == "Complete": return 3
@@ -129,8 +135,9 @@ with tab_ws:
                 for item in open_list:
                     r = item['data']
                     idx = item['row_idx']
-                    stat = r[18].strip() if len(r) > 18 else "In Process"
+                    stat = r[19].strip() if len(r) > 19 else "In Process"
                     
+                    # Status visuals (Emoji for Title)
                     if stat == "On Hold":
                         display_stat = f"🔴 {stat}"
                         title_color = "#FF4B4B"
@@ -142,7 +149,9 @@ with tab_ws:
                         title_color = "#FF8C00"
 
                     if s_o.lower() in str(r).lower():
+                        # Display Card
                         with st.expander(f"{r[1]} | {r[5]} | {display_stat}"):
+                            # Colored Heading inside
                             st.markdown(f"<h2 style='color:{title_color}; margin-top:0;'>{display_stat}</h2>", unsafe_allow_html=True)
                             
                             c1, c2, c3 = st.columns(3)
@@ -155,11 +164,14 @@ with tab_ws:
                             with c2:
                                 st.markdown(f"**🛠️ Staff:**\n{r[9]}")
                                 st.markdown("---")
+                                st.markdown(f"**👨‍🔧 Technician:**\n{r[17] if len(r)>17 and r[17].strip() != '' else 'Not Assigned'}")
+                                st.markdown("---")
                                 st.markdown(f"**🛣️ Odometer (KM):**\n{r[7] if len(r)>7 else 'N/A'}")
                                 st.markdown("---")
                                 st.info(f"**🚨 Issues:**\n{r[15] if len(r)>15 else 'N/A'}")
                             with c3:
-                                n_rem = st.text_area("Workshop Remark", r[17] if len(r)>17 else "", key=f"r_{idx}", height=120)
+                                # Remark ab index 18 par hai
+                                n_rem = st.text_area("Workshop Remark", r[18] if len(r)>18 else "", key=f"r_{idx}", height=120)
                                 st_opts = ["On Hold", "In Process", "Complete", "Delivered"]
                                 try: curr_sel = st_opts.index(stat)
                                 except: curr_sel = 1
@@ -167,18 +179,21 @@ with tab_ws:
                                 n_stat = st.selectbox("Update Status", st_opts, index=curr_sel, key=f"s_{idx}")
                                 
                                 if st.button("SAVE CHANGES", key=f"up_{idx}", use_container_width=True):
-                                    ws_sheet.update_cell(idx, 18, n_rem)
-                                    ws_sheet.update_cell(idx, 19, n_stat)
+                                    # Sheet mein S column = 19, T column = 20
+                                    ws_sheet.update_cell(idx, 19, n_rem)
+                                    ws_sheet.update_cell(idx, 20, n_stat)
                                     st.rerun()
 
             with sub2:
                 s_h = st.text_input("🔍 Search Delivered History", key="ws_sh")
-                history_list = [item for item in all_items if len(item['data']) > 18 and item['data'][18] == "Delivered"]
+                # Filter Delivered bikes (Status ab index 19 par hai)
+                history_list = [item for item in all_items if len(item['data']) > 19 and item['data'][19] == "Delivered"]
                 
                 for item in history_list:
                     r = item['data']
                     if s_h.lower() in str(r).lower():
                         with st.expander(f"✅ {r[1]} | {r[5]} | Delivered"):
+                            # Pura data History section mein
                             hc1, hc2, hc3 = st.columns(3)
                             with hc1:
                                 st.markdown(f"**👤 Customer:** {r[1]}")
@@ -188,10 +203,12 @@ with tab_ws:
                             with hc2:
                                 st.markdown(f"**🆔 VIN:** {r[8] if len(r)>8 else 'N/A'}")
                                 st.markdown(f"**🛠️ Staff:** {r[9] if len(r)>9 else 'N/A'}")
+                                st.markdown(f"**👨‍🔧 Technician:**\n{r[17] if len(r)>17 and r[17].strip() != '' else 'Not Assigned'}")
                                 st.markdown(f"**🛣️ Odo:** {r[7] if len(r)>7 else 'N/A'} KM")
                             with hc3:
                                 st.warning(f"**🚨 Issues:**\n{r[15] if len(r)>15 else 'N/A'}")
-                                st.success(f"**✍️ Final Remark:**\n{r[17] if len(r)>17 else 'N/A'}")
+                                # Remark ab index 18 par hai
+                                st.success(f"**✍️ Final Remark:**\n{r[18] if len(r)>18 else 'N/A'}")
                                 st.info(f"**Status:** Delivered")
 
     except Exception as e:
