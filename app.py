@@ -85,12 +85,13 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-tab_ws, tab_app, tab_call, tab_kpi, tab_parts = st.tabs([
+tab_ws, tab_app, tab_call, tab_kpi, tab_parts, tab_parked= st.tabs([
     "🔧 WORKSHOP MANAGER", 
     "📅 APPOINTMENTS", 
     "📞 SERVICE CALLING", 
     "📊 KPI DASHBOARD",
-    "📦 PARTS"
+    "📦 PARTS",
+    "🅿️ BIKE PARKED"
 ])
 
 # ------------------------------------------
@@ -819,3 +820,207 @@ with tab_parts:
 
     except Exception as e:
         st.error(f"🔴 Main Error: {e}")
+# ==========================================
+# MAIN TAB 6: BIKE PARKED (FLEET & RETENTION)
+# ==========================================
+with tab_parked:
+    try:
+        # 1. LOAD DATA 
+        parked_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
+        
+        @st.cache_data(ttl=60)
+        def load_parked_data():
+            d_sheet = connect_sheet_by_url(parked_url, "Dashboard")
+            m_sheet = connect_sheet_by_url(parked_url, "Main Service Sheet")
+            o_sheet = connect_sheet_by_url(parked_url, "Oil") 
+            return d_sheet.get_all_values(), m_sheet.get_all_values(), o_sheet.get_all_values()
+
+        bp_data, main_sheet_data, oil_data = load_parked_data()
+
+        # Helper function for Dashboard cells
+        def get_bp_val(row_idx, col_letter):
+            try:
+                c_idx = ord(col_letter.upper()) - 65
+                val = bp_data[row_idx - 1][c_idx]
+                return val if val else "0"
+            except:
+                return "0"
+                
+        def safe_int(val):
+            try:
+                return int(str(val).replace(',', '').strip())
+            except:
+                return 0
+
+        # --- PYTHON LOGIC FOR "TOTAL BIKE PARKED YTD" ---
+        ytd_parked_count = 0
+        active_parked_ids = set() 
+        
+        for row in main_sheet_data[1:]: 
+            col_c = str(row[2]) if len(row) > 2 else "" # Col C = index 2
+            col_v = str(row[21]) if len(row) > 21 else "" # Col V = index 21
+            
+            if col_c.strip() != "" and col_v == "":
+                ytd_parked_count += 1
+                # FIX 1: Python ko case-insensitive banane ke liye .upper() lagaya
+                active_parked_ids.add(col_c.strip().upper()) 
+
+        # --- PYTHON LOGIC FOR "INDORE OIL CHANGED (1 Yr)" ---
+        indore_oil_count = 0
+        try:
+            # FIX 2: Exact Google Sheet jaisa date logic (bina time ke)
+            today = pd.Timestamp.today().normalize()
+            one_year_ago = today - pd.Timedelta(days=365)
+            unique_oil_ids = set()
+            
+            for row in oil_data[1:]: 
+                # FIX 1: Oil ID ko bhi upper case kiya match karne ke liye
+                oil_id = str(row[0]).strip().upper() if len(row) > 0 else "" # Col A
+                oil_date_str = str(row[4]).strip() if len(row) > 4 else "" # Col E
+                
+                if oil_id in active_parked_ids and oil_date_str:
+                    try:
+                        # Date ko normalize kiya taaki time ka jhanjhat na rahe
+                        oil_date = pd.to_datetime(oil_date_str, errors='coerce', dayfirst=True).normalize()
+                        
+                        # FIX 2: >= TODAY()-365 AND <= TODAY() wala exact Google logic
+                        if pd.notna(oil_date) and (one_year_ago <= oil_date <= today):
+                            unique_oil_ids.add(oil_id)
+                    except:
+                        pass
+            indore_oil_count = len(unique_oil_ids)
+        except Exception as e:
+            indore_oil_count = 0
+
+        # --- CSS FOR THIS TAB ---
+        st.markdown("""
+            <style>
+                .bp-tile { background-color: #f8f9fa; border-left: 5px solid #0056b3; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; }
+                .bp-tile-title { font-size: 13px; color: #555; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
+                .bp-tile-value { font-size: 24px; color: #111; font-weight: 900; margin: 0; }
+                
+                .parked-table { width: 100%; border-collapse: collapse; text-align: center; margin-bottom: 20px; }
+                .parked-table th, .parked-table td { border: 1px solid #ddd; padding: 8px; }
+                .parked-table th { background-color: #0056b3 !important; color: white !important; font-weight: bold !important; }
+            </style>
+        """, unsafe_allow_html=True)
+
+        # ---------------------------------------------------------
+        # SECTION 1: TOP SUMMARY TILES
+        # ---------------------------------------------------------
+        st.markdown("### 📊 Bike Parked Summary")
+        t1, t2, t3, t4 = st.columns(4)
+        
+        with t1:
+            st.markdown(f'<div class="bp-tile" style="border-color: #0056b3;"><div class="bp-tile-title">TOTAL BIKE PARKED (YTD)</div><div class="bp-tile-value">{ytd_parked_count}</div></div>', unsafe_allow_html=True)
+        with t2:
+            st.markdown(f'<div class="bp-tile" style="border-color: #28a745;"><div class="bp-tile-title">BBND</div><div class="bp-tile-value">{get_bp_val(2, "I")}</div></div>', unsafe_allow_html=True)
+        with t3:
+            st.markdown(f'<div class="bp-tile" style="border-color: #ff8c00;"><div class="bp-tile-title">SERVICE RETENTION</div><div class="bp-tile-value">{get_bp_val(14, "J")}</div></div>', unsafe_allow_html=True)
+        with t4:
+            st.markdown(f'<div class="bp-tile" style="border-color: #17a2b8;"><div class="bp-tile-title">TOTAL BIKE PARKED OIL CHANGE (1 YR)</div><div class="bp-tile-value">{indore_oil_count}</div></div>', unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ---------------------------------------------------------
+        # SECTION 2: INACTIVE Bikes & CORE VS SMART
+        # ---------------------------------------------------------
+        col_A, col_B = st.columns(2)
+
+        with col_A:
+            st.markdown("#### 🚫 Inactive Bikes")
+            st.info("Vehicles beyond service scope - relocated, sold, or total loss.")
+            
+            oot_html = f"""
+            <table class="parked-table">
+                <tr><th>Category</th><th>Count</th></tr>
+                <tr><td>Relocated</td><td><b>{get_bp_val(5, "J")}</b></td></tr>
+                <tr><td>Sold / Contact N.A.</td><td><b>{get_bp_val(6, "J")}</b></td></tr>
+                <tr><td>Total Loss</td><td><b>{get_bp_val(7, "J")}</b></td></tr>
+                <tr style="background-color:#ffeeba;"><td><b>Lost Customer</b></td><td><b style="color:red; font-size: 18px;">{get_bp_val(4, "J")}</b></td></tr>
+            </table>
+            """
+            st.markdown(oot_html, unsafe_allow_html=True)
+
+        with col_B:
+            st.markdown("#### 🏍️ Core & Smart Bikes Status")
+            st.success("Bifurcation of Total Bikes Parked.")
+            
+            total_core = sum(safe_int(get_bp_val(i, "B")) for i in range(14, 19))
+            total_smart = sum(safe_int(get_bp_val(i, "C")) for i in range(14, 19)) + safe_int(get_bp_val(2, "I"))
+
+            core_smart_html = f"""
+            <table class="parked-table">
+                <tr><th>Status</th><th>Core</th><th>Smart</th></tr>
+                <tr><td>Service Done</td><td>{get_bp_val(14, "B")}</td><td>{get_bp_val(14, "C")}</td></tr>
+                <tr><td>Service Pending</td><td>{get_bp_val(15, "B")}</td><td>{get_bp_val(15, "C")}</td></tr>
+                <tr><td>Relocated</td><td>{get_bp_val(16, "B")}</td><td>{get_bp_val(16, "C")}</td></tr>
+                <tr><td>Sold / Contact N.A.</td><td>{get_bp_val(17, "B")}</td><td>{get_bp_val(17, "C")}</td></tr>
+                <tr><td>Total Loss</td><td>{get_bp_val(18, "B")}</td><td>{get_bp_val(18, "C")}</td></tr>
+                <tr style="background-color:#d4edda;"><td><b style="font-size:16px;">Total</b></td><td><b style="font-size:16px;">{total_core}</b></td><td><b style="font-size:16px;">{total_smart}</b></td></tr>
+            </table>
+            """
+            st.markdown(core_smart_html, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ---------------------------------------------------------
+        # SECTION 3: SERVICE PIPELINE & AREA-WISE BACKLOG
+        # ---------------------------------------------------------
+        st.markdown("#### 📅 Service Pipeline & Area-wise Backlog")
+        
+        pipe_col1, pipe_gap, pipe_col2 = st.columns([1, 0.1, 0.8])
+        
+        with pipe_col1:
+            pipe_html = f"""
+            <table class="parked-table">
+                <tr><th>Service No.</th><th>Service Pending</th><th>Service Coming</th><th>Service Done</th></tr>
+                <tr><td><b>1st Service</b></td><td>{get_bp_val(2, "B")}</td><td>{get_bp_val(2, "C")}</td><td>{get_bp_val(2, "D")}</td></tr>
+                <tr><td><b>2nd Service</b></td><td>{get_bp_val(3, "B")}</td><td>{get_bp_val(3, "C")}</td><td>{get_bp_val(3, "D")}</td></tr>
+                <tr><td><b>3rd Service</b></td><td>{get_bp_val(4, "B")}</td><td>{get_bp_val(4, "C")}</td><td>{get_bp_val(4, "D")}</td></tr>
+                <tr><td><b>4th Service</b></td><td>{get_bp_val(5, "B")}</td><td>{get_bp_val(5, "C")}</td><td>{get_bp_val(5, "D")}</td></tr>
+                <tr><td><b>5th Service</b></td><td>{get_bp_val(6, "B")}</td><td>{get_bp_val(6, "C")}</td><td>{get_bp_val(6, "D")}</td></tr>
+                <tr><td><b>6th Service</b></td><td>{get_bp_val(7, "B")}</td><td>{get_bp_val(7, "C")}</td><td>{get_bp_val(7, "D")}</td></tr>
+                <tr style="background-color:#fff3cd;"><td><b>Total Pending</b></td><td><b>{get_bp_val(8, "B")}</b></td><td><b>{get_bp_val(8, "C")}</b></td><td><b>{get_bp_val(8, "D")}</b></td></tr>
+                <tr style="background-color:#d4edda;"><td><b>Percentage</b></td><td><b>{get_bp_val(9, "B")}</b></td><td><b>{get_bp_val(9, "C")}</b></td><td><b>{get_bp_val(9, "D")}</b></td></tr>
+            </table>
+            """
+            st.markdown(pipe_html, unsafe_allow_html=True)
+            
+        with pipe_col2:
+            city_html = f"""
+            <table class="parked-table">
+                <tr><th>Service No.</th><th>Indore Pending</th><th>Outstation Pending</th></tr>
+                <tr><td><b>1st Service</b></td><td>{get_bp_val(2, "F")}</td><td>{get_bp_val(2, "G")}</td></tr>
+                <tr><td><b>2nd Service</b></td><td>{get_bp_val(3, "F")}</td><td>{get_bp_val(3, "G")}</td></tr>
+                <tr><td><b>3rd Service</b></td><td>{get_bp_val(4, "F")}</td><td>{get_bp_val(4, "G")}</td></tr>
+                <tr><td><b>4th Service</b></td><td>{get_bp_val(5, "F")}</td><td>{get_bp_val(5, "G")}</td></tr>
+                <tr><td><b>5th Service</b></td><td>{get_bp_val(6, "F")}</td><td>{get_bp_val(6, "G")}</td></tr>
+                <tr><td><b>6th Service</b></td><td>{get_bp_val(7, "F")}</td><td>{get_bp_val(7, "G")}</td></tr>
+                <tr style="background-color:#fff3cd;"><td><b>Total</b></td><td><b>{get_bp_val(8, "F")}</b></td><td><b>{get_bp_val(8, "G")}</b></td></tr>
+            </table>
+            """
+            st.markdown(city_html, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ---------------------------------------------------------
+        # SECTION 4: HIGH-RISK FLEET
+        # ---------------------------------------------------------
+        st.markdown("#### ⚠️ High-Risk Bikes (1.5+ Years Inactive)")
+        st.error("Customers highly likely to be servicing at unauthorized workshops.")
+        
+        risk_html = f"""
+        <table class="parked-table" style="width:60%; margin:auto;">
+            <tr><th>Service Category</th><th>Indore</th><th>Outstation</th><th>Total</th></tr>
+            <tr><td><b>1st Service</b></td><td>{get_bp_val(23, "D")}</td><td>{get_bp_val(23, "C")}</td><td><b>{get_bp_val(23, "B")}</b></td></tr>
+            <tr><td><b>2nd Service</b></td><td>{get_bp_val(24, "D")}</td><td>{get_bp_val(24, "C")}</td><td><b>{get_bp_val(24, "B")}</b></td></tr>
+            <tr><td><b>3rd Service</b></td><td>{get_bp_val(25, "D")}</td><td>{get_bp_val(25, "C")}</td><td><b>{get_bp_val(25, "B")}</b></td></tr>
+            <tr><td><b>4th Service</b></td><td>{get_bp_val(26, "D")}</td><td>{get_bp_val(26, "C")}</td><td><b>{get_bp_val(26, "B")}</b></td></tr>
+            <tr style="background-color:#f8d7da;"><td><b>GRAND TOTAL</b></td><td><b style="color:red; font-size:18px;">{get_bp_val(27, "D")}</b></td><td><b style="color:red; font-size:18px;">{get_bp_val(27, "C")}</b></td><td><b style="color:red; font-size:18px;">{get_bp_val(27, "B")}</b></td></tr>
+        </table>
+        """
+        st.markdown(risk_html, unsafe_allow_html=True)
+
+    except Exception as e:
+        st.error(f"🔴 Bike Parked Data Error: {str(e)}")
