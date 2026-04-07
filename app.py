@@ -113,6 +113,34 @@ with tab_ws:
                     'row_idx': i + 2, 
                     'data': r
                 })
+        # --- 1. CALCULATION FOR TILES ---
+            # Status index 19 (Column T)
+            counts = {"Delivered": 0, "Complete": 0, "In Process": 0, "On Hold": 0}
+            for item in all_items:
+                status = item['data'][19].strip() if len(item['data']) > 19 else "In Process"
+                if status in counts:
+                    counts[status] += 1
+
+            # --- 2. DISPLAY SUMMARY TILES ---
+            t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+            
+            tile_style = """
+                <div style="background-color: {color}; padding: 15px; border-radius: 10px; text-align: center; color: {text_color}; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
+                    <p style="margin: 0; font-size: 14px; font-weight: bold; text-transform: uppercase;">{label}</p>
+                    <h2 style="margin: 0; font-size: 32px;">{value}</h2>
+                </div>
+            """
+
+            with t_col1:
+                st.markdown(tile_style.format(color="#E3F2FD", text_color="#0D47A1", label="Delivered", value=counts["Delivered"]), unsafe_allow_html=True)
+            with t_col2:
+                st.markdown(tile_style.format(color="#E8F5E9", text_color="#1B5E20", label="Complete", value=counts["Complete"]), unsafe_allow_html=True)
+            with t_col3:
+                st.markdown(tile_style.format(color="#FFFDE7", text_color="#F57F17", label="In Process", value=counts["In Process"]), unsafe_allow_html=True)
+            with t_col4:
+                st.markdown(tile_style.format(color="#FFEBEE", text_color="#B71C1C", label="On Hold", value=counts["On Hold"]), unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True) # Gap between tiles and tabs
 
             sub1, sub2 = st.tabs(["📂 Open JCs", "✅ History (Delivered)"])
             
