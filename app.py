@@ -113,21 +113,36 @@ with tab_ws:
                     'row_idx': i + 2, 
                     'data': r
                 })
+
         # --- 1. CALCULATION FOR TILES ---
             # Status index 19 (Column T)
             counts = {"Delivered": 0, "Complete": 0, "In Process": 0, "On Hold": 0}
+            total_projection_revenue = 0.0
             for item in all_items:
-                status = item['data'][19].strip() if len(item['data']) > 19 else "In Process"
+                row_data = item['data']
+                status = row_data[19].strip() if len(row_data) > 19 else "In Process"
+                
                 if status in counts:
                     counts[status] += 1
 
+                # Agar status "Delivered" nahi hai, toh Column X (index 23) ka sum lena hai
+                if status != "Delivered" and len(row_data) > 23:
+                    # Amount mein se comma hata kar float mein convert karna zaroori hai
+                    revenue_str = str(row_data[23]).replace(',', '').strip()
+                    
+                    # Check karna ki value empty na ho aur number hi ho
+                    try:
+                        if revenue_str: 
+                            total_projection_revenue += float(revenue_str)
+                    except ValueError:
+                        pass # Agar galti se text likha ho cell me toh ignore karega
+
             # --- 2. DISPLAY SUMMARY TILES ---
-            t_col1, t_col2, t_col3, t_col4 = st.columns(4)
-            
+            t_col1, t_col2, t_col3, t_col4,t_col5 = st.columns(5)
             tile_style = """
                 <div style="background-color: {color}; padding: 15px; border-radius: 10px; text-align: center; color: {text_color}; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
                     <p style="margin: 0; font-size: 14px; font-weight: bold; text-transform: uppercase;">{label}</p>
-                    <h2 style="margin: 0; font-size: 32px;">{value}</h2>
+                    <h2 style="margin: 0; font-size: 24px;">{value}</h2>
                 </div>
             """
 
@@ -139,8 +154,13 @@ with tab_ws:
                 st.markdown(tile_style.format(color="#FFFDE7", text_color="#F57F17", label="In Process", value=counts["In Process"]), unsafe_allow_html=True)
             with t_col4:
                 st.markdown(tile_style.format(color="#FFEBEE", text_color="#B71C1C", label="On Hold", value=counts["On Hold"]), unsafe_allow_html=True)
+            with t_col5:
+                # Revenue ko thoda achhe format me dikhane ke liye (eg. 150000 -> ₹1,50,000)
+                formatted_revenue = f"₹{total_projection_revenue:,.0f}"
+                st.markdown(tile_style.format(color="#F3E5F5", text_color="#4A148C", label="Projected Revenue", value=formatted_revenue), unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True) # Gap between tiles and tabs
+
 
             sub1, sub2 = st.tabs(["📂 Open JCs", "✅ History (Delivered)"])
             
@@ -189,6 +209,8 @@ with tab_ws:
                                 st.markdown(f"**📱 Phone:**\n{r[2]}")
                                 st.markdown("---")
                                 st.markdown(f"**🆔 VIN:**\n{r[8]}")
+                                st.markdown("---")
+                                st.markdown(f"**💵 Estimated Total Revenue:**\n ₹ {r[23]}")
                             with c2:
                                 st.markdown(f"**🛠️ Staff:**\n{r[9]}")
                                 st.markdown("---")
@@ -233,6 +255,8 @@ with tab_ws:
                                 st.markdown(f"**🛠️ Staff:** {r[9] if len(r)>9 else 'N/A'}")
                                 st.markdown(f"**👨‍🔧 Technician:**\n{r[17] if len(r)>17 and r[17].strip() != '' else 'Not Assigned'}")
                                 st.markdown(f"**🛣️ Odo:** {r[7] if len(r)>7 else 'N/A'} KM")
+                                st.markdown(f"**💵 Parts Revenue (Without Tax):** ₹ {r[21] if len(r)>21 else 'N/A'}")
+                                st.markdown(f"**💵 Labor Revenue (With Tax):** ₹ {r[22] if len(r)>22 else 'N/A'}")
                             with hc3:
                                 st.warning(f"**🚨 Issues:**\n{r[15] if len(r)>15 else 'N/A'}")
                                 # Remark ab index 18 par hai
