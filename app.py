@@ -85,13 +85,14 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-tab_ws, tab_app, tab_call, tab_kpi, tab_parts, tab_parked= st.tabs([
+tab_ws, tab_app, tab_call, tab_kpi, tab_parts, tab_parked, tab_rev = st.tabs([
     "🔧 WORKSHOP MANAGER", 
     "📅 APPOINTMENTS", 
     "📞 SERVICE CALLING", 
     "📊 KPI DASHBOARD",
     "📦 PARTS",
-    "🅿️ BIKE PARKED"
+    "🅿️ BIKE PARKED",
+    "💰 REVENUE"
 ])
 
 # ------------------------------------------
@@ -1093,3 +1094,223 @@ with tab_parked:
 
     except Exception as e:
         st.error(f"🔴 Bike Parked Data Error: {str(e)}")
+
+# ==========================================
+# 7. REVENUE TAB (STRUCTURE ONLY)
+# ==========================================
+with tab_rev:
+    st.title("💰 Revenue Analytics")
+    
+    # Sub-tabs create karna
+    st_rev_1, st_rev_2, st_rev_3 = st.tabs([
+        "📅 CURRENT MONTH", 
+        "📈 YTD (Year to Date)", 
+        "📊 YoY COMPARISON"
+    ])
+
+    # --- SUB TAB 1: CURRENT MONTH ---
+    with st_rev_1:
+        
+        # 🗓️ MONTH & YEAR SELECTOR
+        col_m, col_y, _ = st.columns([1, 1, 3]) 
+        with col_m:
+            months_list = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+            current_m_idx = datetime.now().month - 1
+            sel_month = st.selectbox("📅 Select Month", months_list, index=current_m_idx)
+        with col_y:
+            sel_year = st.selectbox("🗓️ Select Year", [2025, 2026, 2027], index=1) # 2026 default
+
+        # 🔄 DYNAMIC DATES CALCULATION
+        m_num = months_list.index(sel_month) + 1
+        start_dt = pd.to_datetime(f"{sel_year}-{m_num:02d}-01")
+        
+        
+        report_dates = pd.date_range(start=start_dt, end=start_dt + pd.offsets.MonthEnd(0))
+        
+        start_date_range = report_dates[0].strftime("%d %b %Y")
+        end_date_range = report_dates[-1].strftime("%d %b %Y")
+        
+        # 1. 🏆 PREMIUM STYLED TITLE
+        st.markdown(f"""
+            <div style="
+                background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%);
+                padding: 20px;
+                border-radius: 15px;
+                text-align: center;
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+                margin-top: 10px;
+                margin-bottom: 30px;
+                border: 2px solid #000;
+            ">
+                <h1 style="color: white; margin: 0; font-size: 28px; font-family: 'Segoe UI', sans-serif;">
+                    MUNICH MOTORRAD INDORE W/S REPORT
+                </h1>
+                <p style="color: #e0e7ff; margin: 5px 0 0 0; font-size: 18px; font-weight: 500;">
+                    Period: {start_date_range} to {end_date_range}
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        url_2026 = "https://docs.google.com/spreadsheets/d/1XYZWk94-RCqABmzCd40-v6RLlXcwbOaxPMK9jE8x9No/edit"
+        ws_2026 = connect_sheet_by_url(url_2026, "2026")
+
+        if ws_2026:
+            raw_data = ws_2026.get_all_values()
+            
+            if len(raw_data) > 1:
+                headers = [str(h).strip() for h in raw_data[0]]
+                df_2026 = pd.DataFrame(raw_data[1:], columns=headers)
+
+                # Column Config
+                col_date, col_vin, col_cat = 'Document Date', 'VIN #', 'Item Type'
+                col_labour_amt = 'Final Amount with tax'     # AN
+                col_parts_amt = 'Final Amount without tax'   # AG
+                col_dnp = 'DNP'                              # AT
+
+                if col_date in df_2026.columns:
+                    # 1. DATA CLEANING
+                    cols_to_clean = [col_cat, 'Type', 'Module Name', 'Customer Type', 'Part Type', 'Description']
+                    for col in cols_to_clean:
+                        if col in df_2026.columns:
+                            df_2026[col + '_Clean'] = df_2026[col].astype(str).str.strip().str.lower()
+                        else:
+                            df_2026[col + '_Clean'] = ''
+                    
+                    def clean_amt(series):
+                        return pd.to_numeric(series.astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
+                    
+                    df_2026['LabAmt'] = clean_amt(df_2026[col_labour_amt]) 
+                    df_2026['PartAmt'] = clean_amt(df_2026[col_parts_amt])
+                    df_2026['DnpAmt'] = clean_amt(df_2026[col_dnp])
+
+                    df_2026['Date_DT'] = pd.to_datetime(df_2026[col_date], format='mixed', dayfirst=True, errors='coerce').dt.date
+                    df_2026['VIN_Clean'] = df_2026[col_vin].astype(str).str.strip().str.upper()
+                    invalid_vins = {'', 'NAN', 'NONE', '- NONE -'}
+
+                    rows = []
+
+                    # Calculate Table 1 (Throughput)
+                    for d in report_dates:
+                        target_date = d.date()
+                        df_day = df_2026[df_2026['Date_DT'] == target_date]
+                        day_vins = df_day[~df_day['VIN_Clean'].isin(invalid_vins)]['VIN_Clean'].unique()
+                        ach_thru = len(day_vins)
+                        
+                        ach_lab = df_day.loc[df_day['Item Type_Clean'].isin(["labor", "warranty handling charges"]), 'LabAmt'].sum()
+                        ach_part = df_day.loc[df_day['Item Type_Clean'].isin(["parts", "part"]), 'PartAmt'].sum()
+
+                        rows.append({
+                            "Date": f"{d.month}/{d.day}/{d.year}",
+                            "T_Throughput": 3, "T_Labour": 7142, "T_Parts": 28571,
+                            "A_Throughput": ach_thru, "A_Labour": ach_lab, "A_Parts": ach_part,
+                            "G_Throughput": 3 - ach_thru, "G_Labour": 7142 - ach_lab, "G_Parts": 28571 - ach_part
+                        })
+
+                    df_data = pd.DataFrame(rows)
+                    total_row = {"Date": "Total"}
+                    for c in df_data.columns[1:]: total_row[c] = df_data[c].sum()
+                    df_final = pd.concat([pd.DataFrame([total_row]), df_data], ignore_index=True)
+                    df_final.columns = pd.MultiIndex.from_tuples([("", "Date"), ("Target", "Throughput"), ("Target", "Labour"), ("Target", "Parts"), ("Achievement", "Throughput"), ("Achievement", "Labour With Tax"), ("Achievement", "Parts W/O Tax"), ("Gap", "Throughput"), ("Gap", "Labour"), ("Gap", "Parts")])
+
+                    # 🎨 OPTIMIZED CSS 
+                    custom_css = [
+                        {'selector': 'table', 'props': [('border', '2px solid black'), ('border-collapse', 'collapse'), ('width', '100%'), ('margin-bottom', '20px'), ('font-size', '13px')]},
+                        {'selector': 'th', 'props': [('background-color', 'royalblue'), ('color', 'white'), ('font-weight', 'bold'), ('text-align', 'center'), ('border', '1px solid black'), ('padding', '6px 4px'), ('white-space', 'nowrap')]},
+                        {'selector': 'td', 'props': [('text-align', 'center'), ('border', '1px solid black'), ('padding', '6px 4px'), ('font-weight', '500'), ('white-space', 'nowrap')]}
+                    ]
+
+                    # --- SIDE BY SIDE LAYOUT START ---
+                    col1, col2 = st.columns([1.6, 1]) 
+
+                    with col1:
+                        st.markdown("### 📊 Monthly Achievement")
+                        fmt_map = {c: "{:.2f}" for c in df_final.columns[1:]}
+                        for c in df_final.columns:
+                            if 'Throughput' in c[1]: fmt_map[c] = "{:.0f}"
+                        
+                        styled_t1 = df_final.style.format(fmt_map).apply(lambda r: ['background-color: #8db4e2; font-weight: bold; color: black']*len(r) if r[("", "Date")] == "Total" else ['']*len(r), axis=1).set_table_styles(custom_css).hide(axis="index")
+                        
+                        st.markdown(f'<div style="overflow-x: auto; max-width: 100%;">{styled_t1.to_html()}</div>', unsafe_allow_html=True)
+
+                    with col2:
+                        st.markdown("### 💰 Monthly Revenue Summary")
+                        df_month = df_2026[df_2026['Date_DT'].isin([d.date() for d in report_dates])]
+                        try: tiles_sum = counts.get("Complete", 0) + counts.get("In Process", 0) + counts.get("On Hold", 0)
+                        except NameError: tiles_sum = 0
+
+                        # Vehicle Rec logic (Agar select kiya hua mahina current month nahi hai, to in-process wali tiles ko ignore karna better hai, par filhal wahi rakha hai)
+                        v_comp = df_data["A_Throughput"].sum()
+                        v_rec = v_comp + tiles_sum
+                        t_bikes = len(df_month[df_month['Description_Clean'].str.contains("oil filter", na=False) & df_month['VIN_Clean'].str.contains("WB", na=False)])
+
+                        def sm(t): return df_month['Type_Clean'].str.contains('invoice', na=False) if t == 'inv' else df_month['Customer Type_Clean'].str.contains(t, na=False)
+                        def get_rev(m_it, m_ct):
+                            mask = df_month['Item Type_Clean'].str.contains(m_it, na=False) & sm('inv') & sm(m_ct)
+                            return df_month.loc[mask, 'LabAmt'].sum(), df_month.loc[mask, 'PartAmt'].sum(), df_month.loc[mask, 'DnpAmt'].sum()
+
+                        ws_l_wt, ws_l_wot, _ = get_rev('labor', 'external')
+                        war_l1_wt, war_l1_wot, _ = get_rev('warranty handling', 'inv') 
+                        war_l2_wt, war_l2_wot, _ = get_rev('labor', 'warranty')
+                        war_l_wt, war_l_wot = war_l1_wt + war_l2_wt, war_l1_wot + war_l2_wot
+                        
+                        m_spare = df_month['Item Type_Clean'].str.contains('part', na=False)
+                        m_ws_p = df_month['Part Type_Clean'].str.contains('1 - normal|9 - miscelleneous|local', na=False)
+                        ws_s_wt = df_month.loc[m_spare & sm('external') & m_ws_p, 'LabAmt'].sum()
+                        ws_s_wot = df_month.loc[m_spare & sm('external') & m_ws_p, 'PartAmt'].sum()
+                        ws_s_dnp = df_month.loc[m_spare & sm('external') & m_ws_p, 'DnpAmt'].sum()
+                        
+                        war_s_wt = df_month.loc[m_spare & sm('warranty'), 'LabAmt'].sum()
+                        war_s_wot = df_month.loc[m_spare & sm('warranty'), 'PartAmt'].sum()
+                        war_s_dnp = df_month.loc[m_spare & sm('warranty'), 'DnpAmt'].sum()
+                        
+                        m_acc = df_month['Part Type_Clean'].str.contains('7 - bmw|3 - retrofit', na=False)
+                        acc_wt = df_month.loc[m_spare & sm('external') & m_acc, 'LabAmt'].sum()
+                        acc_wot = df_month.loc[m_spare & sm('external') & m_acc, 'PartAmt'].sum()
+                        acc_dnp = df_month.loc[m_spare & sm('external') & m_acc, 'DnpAmt'].sum()
+
+                        def f_v(v, dnp_l=False): return "" if (dnp_l or v==0) else f"₹ {v:,.2f}"
+                        
+                        summary_data = [
+                            {"Particulars": "Vehicle received", "With Tax": str(int(v_rec)), "Without Tax": "", "DNP": ""},
+                            {"Particulars": "Vehicle completed", "With Tax": str(int(v_comp)), "Without Tax": "", "DNP": ""},
+                            {"Particulars": "Total Bikes serviced", "With Tax": str(int(t_bikes)), "Without Tax": "", "DNP": ""},
+                            {"Particulars": "W/S LABOUR", "With Tax": f_v(ws_l_wt), "Without Tax": f_v(ws_l_wot), "DNP": ""},
+                            {"Particulars": "WARRANTY LABOUR", "With Tax": f_v(war_l_wt), "Without Tax": f_v(war_l_wot), "DNP": ""},
+                            {"Particulars": "TOTAL LABOUR", "With Tax": f_v(ws_l_wt+war_l_wt), "Without Tax": f_v(ws_l_wot+war_l_wot), "DNP": ""},
+                            {"Particulars": "W/S SPARE", "With Tax": f_v(ws_s_wt), "Without Tax": f_v(ws_s_wot), "DNP": f_v(ws_s_dnp)},
+                            {"Particulars": "WARRANTY SPARE", "With Tax": f_v(war_s_wt), "Without Tax": f_v(war_s_wot), "DNP": f_v(war_s_dnp)},
+                            {"Particulars": "TOTAL SPARE", "With Tax": f_v(ws_s_wt+war_s_wt), "Without Tax": f_v(ws_s_wot+war_s_wot), "DNP": f_v(ws_s_dnp+war_s_dnp)},
+                            {"Particulars": "TOTAL Acc & GG", "With Tax": f_v(acc_wt), "Without Tax": f_v(acc_wot), "DNP": f_v(acc_dnp)},
+                            {"Particulars": "GRAND REVENUE", "With Tax": f_v(ws_l_wt+war_l_wt+ws_s_wt+war_s_wt+acc_wt), "Without Tax": f_v(ws_l_wot+war_l_wot+ws_s_wot+war_s_wot+acc_wot), "DNP": f_v(ws_s_dnp+war_s_dnp+acc_dnp)}
+                        ]
+                        
+                        styled_t2 = pd.DataFrame(summary_data).style.apply(lambda r: ['background-color: #f0f2f6; font-weight: bold; color: black']*len(r) if "TOTAL" in r["Particulars"] or "GRAND" in r["Particulars"] else ['']*len(r), axis=1).set_table_styles(custom_css).hide(axis="index")
+                        
+                        st.markdown(f'<div style="overflow-x: auto; max-width: 100%;">{styled_t2.to_html()}</div>', unsafe_allow_html=True)
+                    
+                else: st.error("Document Date not found.")
+            else: st.warning("Sheet is empty.")
+        else: st.error("Connection Error.")
+
+    # --- SUB TAB 2: YTD ---
+    with st_rev_2:
+        st.subheader("Annual Revenue Growth")
+        y1, y2, y3 = st.columns(3)
+        y1.metric("YTD Parts", "₹0")
+        y2.metric("YTD Labor", "₹0")
+        y3.metric("YTD Total", "₹0")
+        
+        # Placeholder for Chart
+        st.write("📈 **Revenue Trend (Chart Placeholder)**")
+        st.warning("Data link hote hi yahan monthly growth chart generate hoga.")
+
+    # --- SUB TAB 3: YoY COMPARISON ---
+    with st_rev_3:
+        st.subheader("Year on Year Comparison")
+        col_y1, col_y2 = st.columns(2)
+        col_y1.metric("Current Year", "₹0", delta="0%")
+        col_y2.metric("Previous Year", "₹0")
+        
+        # Comparison Table/Chart Area
+        st.write("📊 **Comparison Summary**")
+        st.error("Pichle saal aur iss saal ka comparison data abhi unavailable hai.")
