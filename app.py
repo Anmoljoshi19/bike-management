@@ -7,8 +7,6 @@ import calendar
 import json
 import os
 import time
-from datetime import datetime 
-import re
 
 # ==========================================
 # 1. MAIN SHEET CONNECTION (WORKSHOP + APPOINTMENT)
@@ -16,20 +14,19 @@ import re
 def connect_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        with open("creds.json", "r", encoding='utf-8') as f:
-            creds_info = json.load(f)
+        # MAGIC FIX: Secrets ko dict mein convert kiya taaki error na aaye
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
-        creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
-
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
 
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
 
     except Exception as e:
-        st.error(f"🔴 Connection Error: {sheet_name}")
+        st.error(f"🔴 Connection Error: {sheet_name} | {e}")
         return None
-
 
 # ==========================================
 # SERVICE CALLING SHEET
@@ -37,12 +34,11 @@ def connect_sheet(sheet_name):
 def connect_sheet_by_url(sheet_url, sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        with open("creds.json", "r", encoding='utf-8') as f:
-            creds_info = json.load(f)
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
-        creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
-
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
 
         return client.open_by_url(sheet_url).worksheet(sheet_name)
@@ -50,6 +46,7 @@ def connect_sheet_by_url(sheet_url, sheet_name):
     except Exception as e:
         st.error(f"🔴 Connection Error: {str(e)}")
         return None
+
 # Page Setup
 st.set_page_config(page_title="Munich Motorrad Local", page_icon="🏍️", layout="wide")
 
@@ -88,14 +85,13 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-
-tab_ws, tab_crm, tab_kpi, tab_parts, tab_parked, tab_rev = st.tabs([
+tab_ws, tab_app, tab_call, tab_kpi, tab_parts, tab_parked= st.tabs([
     "🔧 WORKSHOP MANAGER", 
-    "🤝 CRM",  
+    "📅 APPOINTMENTS", 
+    "📞 SERVICE CALLING", 
     "📊 KPI DASHBOARD",
     "📦 PARTS",
-    "🅿️ BIKE PARKED",
-    "💰 REVENUE"
+    "🅿️ BIKE PARKED"
 ])
 
 # ------------------------------------------
@@ -117,36 +113,21 @@ with tab_ws:
                     'row_idx': i + 2, 
                     'data': r
                 })
-
         # --- 1. CALCULATION FOR TILES ---
             # Status index 19 (Column T)
             counts = {"Delivered": 0, "Complete": 0, "In Process": 0, "On Hold": 0}
-            total_projection_revenue = 0.0
             for item in all_items:
-                row_data = item['data']
-                status = row_data[19].strip() if len(row_data) > 19 else "In Process"
-                
+                status = item['data'][19].strip() if len(item['data']) > 19 else "In Process"
                 if status in counts:
                     counts[status] += 1
 
-                # Agar status "Delivered" nahi hai, toh Column X (index 23) ka sum lena hai
-                if status != "Delivered" and len(row_data) > 23:
-                    # Amount mein se comma hata kar float mein convert karna zaroori hai
-                    revenue_str = str(row_data[23]).replace(',', '').strip()
-                    
-                    # Check karna ki value empty na ho aur number hi ho
-                    try:
-                        if revenue_str: 
-                            total_projection_revenue += float(revenue_str)
-                    except ValueError:
-                        pass # Agar galti se text likha ho cell me toh ignore karega
-
             # --- 2. DISPLAY SUMMARY TILES ---
-            t_col1, t_col2, t_col3, t_col4,t_col5 = st.columns(5)
+            t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+            
             tile_style = """
                 <div style="background-color: {color}; padding: 15px; border-radius: 10px; text-align: center; color: {text_color}; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
                     <p style="margin: 0; font-size: 14px; font-weight: bold; text-transform: uppercase;">{label}</p>
-                    <h2 style="margin: 0; font-size: 24px;">{value}</h2>
+                    <h2 style="margin: 0; font-size: 32px;">{value}</h2>
                 </div>
             """
 
@@ -158,13 +139,8 @@ with tab_ws:
                 st.markdown(tile_style.format(color="#FFFDE7", text_color="#F57F17", label="In Process", value=counts["In Process"]), unsafe_allow_html=True)
             with t_col4:
                 st.markdown(tile_style.format(color="#FFEBEE", text_color="#B71C1C", label="On Hold", value=counts["On Hold"]), unsafe_allow_html=True)
-            with t_col5:
-                # Revenue ko thoda achhe format me dikhane ke liye (eg. 150000 -> ₹1,50,000)
-                formatted_revenue = f"₹{total_projection_revenue:,.0f}"
-                st.markdown(tile_style.format(color="#F3E5F5", text_color="#4A148C", label="Projected Revenue", value=formatted_revenue), unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True) # Gap between tiles and tabs
-
 
             sub1, sub2 = st.tabs(["📂 Open JCs", "✅ History (Delivered)"])
             
@@ -213,8 +189,6 @@ with tab_ws:
                                 st.markdown(f"**📱 Phone:**\n{r[2]}")
                                 st.markdown("---")
                                 st.markdown(f"**🆔 VIN:**\n{r[8]}")
-                                st.markdown("---")
-                                st.markdown(f"**💵 Estimated Total Revenue:**\n ₹ {r[23]}")
                             with c2:
                                 st.markdown(f"**🛠️ Staff:**\n{r[9]}")
                                 st.markdown("---")
@@ -259,8 +233,6 @@ with tab_ws:
                                 st.markdown(f"**🛠️ Staff:** {r[9] if len(r)>9 else 'N/A'}")
                                 st.markdown(f"**👨‍🔧 Technician:**\n{r[17] if len(r)>17 and r[17].strip() != '' else 'Not Assigned'}")
                                 st.markdown(f"**🛣️ Odo:** {r[7] if len(r)>7 else 'N/A'} KM")
-                                st.markdown(f"**💵 Parts Revenue (Without Tax):** ₹ {r[21] if len(r)>21 else 'N/A'}")
-                                st.markdown(f"**💵 Labor Revenue (With Tax):** ₹ {r[22] if len(r)>22 else 'N/A'}")
                             with hc3:
                                 st.warning(f"**🚨 Issues:**\n{r[15] if len(r)>15 else 'N/A'}")
                                 # Remark ab index 18 par hai
@@ -269,302 +241,219 @@ with tab_ws:
 
     except Exception as e:
         st.error(f"Workshop Load Error: {e}")
+# ------------------------------------------
+# TAB 2: APPOINTMENT CALENDAR (NO HIGHLIGHT)
+# ------------------------------------------
+with tab_app:
+    try:
+        app_sheet = connect_sheet("Appointments")
+        app_vals = app_sheet.get_all_values()
+        
+        if len(app_vals) > 1:
+            df = pd.DataFrame([{"row": i+2, "N": r[1], "D": r[3], "M": r[4], "P": r[6], "R": r[7] if len(r)>7 else ""} for i, r in enumerate(app_vals[1:])])
+            df['D'] = pd.to_datetime(df['D'], errors='coerce')
+            df = df.dropna(subset=['D'])
 
-# ==========================================
-# 🤝 TAB 2: CRM (Appointments, Calling, VOC)
-# ==========================================
-with tab_crm: 
-    st.header("🤝 Customer Relationship Management (CRM)")
-    
-    # --- 🎨 UI FIX: ROYAL BLUE FILLED BORDER TABS ---
-    st.markdown("""
-        <style>
-        /* Radio circles ko hide karna */
-        [data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child {
-            display: none !important;
-        }
-        /* Buttons ko line mein lana aur gap dena */
-        [data-testid="stRadio"] div[role="radiogroup"] {
-            flex-direction: row;
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-        /* Normal State: Royal Blue Border aur White background */
-        [data-testid="stRadio"] div[role="radiogroup"] > label {
-            background-color: #ffffff !important;
-            border: 2px solid #4169E1 !important; /* Royal Blue */
-            padding: 10px 25px !important;
-            border-radius: 8px !important;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        /* Normal Text: Royal Blue color */
-        [data-testid="stRadio"] div[role="radiogroup"] > label p {
-            color: #4169E1 !important;
-            font-size: 16px !important;
-            font-weight: 700 !important;
-            margin: 0 !important;
-        }
-        /* Hover Effect: Halka blue background */
-        [data-testid="stRadio"] div[role="radiogroup"] > label:hover {
-            background-color: #f0f4ff !important;
-        }
-        /* ACTIVE/SELECTED State: Pura Royal Blue fill aur White Text */
-        div[data-testid="stRadio"] > div[role="radiogroup"] > label:has(input:checked) {
-            background-color: #4169E1 !important;
-            box-shadow: 0px 4px 6px rgba(65, 105, 225, 0.3);
-        }
-        div[data-testid="stRadio"] > div[role="radiogroup"] > label:has(input:checked) p {
-            color: white !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # 🔘 CRM Main Navigation
-    crm_nav = st.radio(
-        "Navigate CRM:",
-        ["📅 Appointments", "📞 Service Calling", "🗣️ VOC"],
-        horizontal=True,
-        label_visibility="collapsed"
-    )
-    
-    st.markdown("---")
+            cy, cm = st.columns(2)
+            y = cy.selectbox("Year", [2025, 2026], index=1)
+            mn = cm.selectbox("Month", list(calendar.month_name)[1:], index=datetime.now().month-1)
+            midx = list(calendar.month_name).index(mn)
 
-    # ==========================================
-    # 1️⃣ MODULE: APPOINTMENTS
-    # ==========================================
-    if crm_nav == "📅 Appointments":
-        try:
-            app_sheet = connect_sheet("Appointments")
-            app_vals = app_sheet.get_all_values()
+            today = datetime.now().date()
+            month_df = df[(df['D'].dt.month == midx) & (df['D'].dt.year == y)].copy()
             
-            if len(app_vals) > 1:
-                df = pd.DataFrame([{
-                    "row": i+2, 
-                    "Name": r[1] if len(r)>1 else "", 
-                    "Phone": r[2] if len(r)>2 else "", 
-                    "D": r[3] if len(r)>3 else "", 
-                    "Model": r[4] if len(r)>4 else "", 
-                    "VIN": r[5] if len(r)>5 else "", 
-                    "P": r[6] if len(r)>6 else "", 
-                    "R": r[7] if len(r)>7 else ""
-                } for i, r in enumerate(app_vals[1:])])
-                
-                df['D'] = pd.to_datetime(df['D'], errors='coerce')
-                df = df.dropna(subset=['D'])
-                today = datetime.now().date()
+            total_apps = len(month_df)
+            reported_apps = len(month_df[month_df['R'].str.contains("Bike Reported", na=False)])
+            pending_apps = len(month_df[
+                (month_df['D'].dt.date < today) & 
+                (~month_df['R'].str.contains("Bike Reported", na=False))
+            ])
 
-                tab_cal, tab_missed = st.tabs(["📅 Calendar View", "⚠️ Missed Appointments"])
-
-                with tab_cal:
-                    cy, cm = st.columns(2)
-                    y = cy.selectbox("Year", [2025, 2026], index=1)
-                    mn = cm.selectbox("Month", list(calendar.month_name)[1:], index=datetime.now().month-1)
-                    midx = list(calendar.month_name).index(mn)
-
-                    month_df = df[(df['D'].dt.month == midx) & (df['D'].dt.year == y)].copy()
-                    
-                    total_apps = len(month_df)
-                    reported_apps = len(month_df[month_df['R'].str.contains("Bike Reported", na=False)])
-                    pending_apps = len(month_df[
-                        (month_df['D'].dt.date < today) & 
-                        (~month_df['R'].str.contains("Bike Reported", na=False))
-                    ])
-
-                    st.markdown("---")
-                    s1, s2, s3 = st.columns(3)
-                    
-                    s1.markdown(f"""<div style="background:#f0f2f6; padding:15px; border-radius:10px; text-align:center; border-left: 5px solid #0056b3;">
-                        <p style="margin:0; font-size:14px; color:#555;">Total Appointments</p>
-                        <h3 style="margin:0; color:#0056b3;">{total_apps}</h3>
-                    </div>""", unsafe_allow_html=True)
-                    
-                    s2.markdown(f"""<div style="background:#e7f3ef; padding:15px; border-radius:10px; text-align:center; border-left: 5px solid #28a745;">
-                        <p style="margin:0; font-size:14px; color:#555;">✅ Reported (Done)</p>
-                        <h3 style="margin:0; color:#28a745;">{reported_apps}</h3>
-                    </div>""", unsafe_allow_html=True)
-                    
-                    p_color = "#d9534f" if pending_apps > 0 else "#ff8c00"
-                    s3.markdown(f"""<div style="background:#fff4e6; padding:15px; border-radius:10px; text-align:center; border-left: 5px solid {p_color};">
-                        <p style="margin:0; font-size:14px; color:#555;">⚠️ Missed/Pending</p>
-                        <h3 style="margin:0; color:{p_color};">{pending_apps}</h3>
-                    </div>""", unsafe_allow_html=True)
-                    
-                    st.markdown("---")
-                    st.markdown("""<style>
-                        [data-testid="stVerticalBlockBorderWrapper"] > div > div { min-height: 250px !important; max-height: 250px !important; overflow-y: auto !important; }
-                        div.stButton > button p { white-space: normal !important; word-wrap: break-word !important; font-size: 11px !important; font-weight: bold !important; }
-                    </style>""", unsafe_allow_html=True)
-
-                    cal = calendar.monthcalendar(y, midx)
-                    cols_header = st.columns(7)
-                    for j, d in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]): 
-                        cols_header[j].markdown(f"<p style='text-align:center;font-weight:bold;color:#0056b3;'>{d}</p>", unsafe_allow_html=True)
-
-                    for week in cal:
-                        cols = st.columns(7)
-                        for i, day in enumerate(week):
-                            if day != 0:
-                                with cols[i].container(border=True):
-                                    st.markdown(f"<div style='text-align:right; font-weight:bold; color:#555;'>{day}</div>", unsafe_allow_html=True)
-                                    
-                                    day_data = month_df[month_df['D'].dt.day == day]
-                                    for _, row in day_data.iterrows():
-                                        is_rep = "Bike Reported" in str(row['R'])
-                                        
-                                        if is_rep: b_c = "#28a745"
-                                        elif row['D'].date() < today: b_c = "#d9534f"
-                                        else: b_c = "#007bff"
-                                        
-                                        st.markdown(f"""<style>div.stButton > button[key="trig_{row['row']}"] {{ border: 2.5px solid {b_c} !important; min-height: 60px !important; margin-bottom: 5px !important; }}</style>""", unsafe_allow_html=True)
-                                        
-                                        if st.button(f"{'✅' if is_rep else '⭕'} {row['Name']}", key=f"trig_{row['row']}", use_container_width=True):
-                                            app_sheet.update_cell(row['row'], 8, "Bike Reported" if not is_rep else "")
-                                            import time
-                                            time.sleep(0.5)
-                                            st.rerun()
-                            else:
-                                cols[i].markdown("<div style='height:100px; opacity:0.1;'></div>", unsafe_allow_html=True)
-
-                with tab_missed:
-                    st.subheader("⚠️ Action Required: Missed Appointments")
-                    missed_df = df[(df['D'].dt.date < today) & (~df['R'].str.contains("Bike Reported", na=False))].sort_values(by='D', ascending=False)
-                    
-                    if missed_df.empty:
-                        st.success("🎉 Perfect! Koi bhi Missed Appointment pending nahi hai.")
-                    else:
-                        for _, row in missed_df.iterrows():
-                            with st.container(border=True):
-                                c1, c2, c3, c4 = st.columns([2, 2, 2, 2.5])
-                                with c1:
-                                    st.markdown(f"**👤 Name:** {row['Name']}")
-                                    st.markdown(f"**📞 Contact:** {row['Phone']}")
-                                with c2:
-                                    st.markdown(f"**🏍️ Model:** {row['Model']}")
-                                    st.markdown(f"**🔢 VIN:** {row['VIN']}")
-                                with c3:
-                                    st.markdown(f"**🔧 Purpose:** {row['P']}")
-                                    st.markdown(f"**📅 Old Date:** <span style='color:#d9534f; font-weight:bold;'>{row['D'].strftime('%d %b %Y')}</span>", unsafe_allow_html=True)
-                                with c4:
-                                    new_date = st.date_input("Select New Date", value=today, key=f"new_dt_{row['row']}")
-                                    st.markdown("<br>", unsafe_allow_html=True)
-                                    if st.button("🔄 Reschedule", key=f"resched_{row['row']}", use_container_width=True):
-                                        app_sheet.update_cell(row['row'], 4, new_date.strftime("%d-%b-%Y"))
-                                        st.success(f"✅ Appointment rescheduled to {new_date.strftime('%d %b')}!")
-                                        import time
-                                        time.sleep(0.5)
-                                        st.rerun()
-        except Exception as e: 
-            st.error(f"Calendar Error: {e}")
-
-    # ==========================================
-    # 2️⃣ MODULE: SERVICE CALLING
-    # ==========================================
-    elif crm_nav == "📞 Service Calling":
-        try:
-            dash_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
-
-            @st.cache_data(ttl=60)
-            def load_calling_data():
-                d_sheet = connect_sheet_by_url(dash_url, "Dashboard")
-                m_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
-                return d_sheet.get("F2:G8"), m_sheet.get_all_values()
-
-            stats_data, raw_data = load_calling_data()
-
-            df_raw = pd.DataFrame(raw_data[1:], columns=raw_data[0])
-            df = df_raw.loc[:, ~df_raw.columns.duplicated()].copy() 
-            df["__row"] = df.index + 2
+            st.markdown("---")
+            s1, s2, s3 = st.columns(3)
             
-            target_col = "Sold by Other Dealer" 
-            mask = (df["Status"].str.lower().str.contains("pending", na=False)) & \
-                   (df[target_col].fillna("").str.strip() == "")
-            df_filtered = df[mask]
+            s1.markdown(f"""<div style="background:#f0f2f6; padding:15px; border-radius:10px; text-align:center; border-left: 5px solid #0056b3;">
+                <p style="margin:0; font-size:14px; color:#555;">Total Appointments</p>
+                <h3 style="margin:0; color:#0056b3;">{total_apps}</h3>
+            </div>""", unsafe_allow_html=True)
+            
+            s2.markdown(f"""<div style="background:#e7f3ef; padding:15px; border-radius:10px; text-align:center; border-left: 5px solid #28a745;">
+                <p style="margin:0; font-size:14px; color:#555;">✅ Reported (Done)</p>
+                <h3 style="margin:0; color:#28a745;">{reported_apps}</h3>
+            </div>""", unsafe_allow_html=True)
+            
+            p_color = "#d9534f" if pending_apps > 0 else "#ff8c00"
+            s3.markdown(f"""<div style="background:#fff4e6; padding:15px; border-radius:10px; text-align:center; border-left: 5px solid {p_color};">
+                <p style="margin:0; font-size:14px; color:#555;">⚠️ Missed/Pending</p>
+                <h3 style="margin:0; color:{p_color};">{pending_apps}</h3>
+            </div>""", unsafe_allow_html=True)
+            
+            st.markdown("---")
 
             st.markdown("""<style>
-                div.stButton > button { width: 100%; height: 110px !important; border-radius: 15px; background-color: white; border: 1px solid #ddd; transition: 0.3s; white-space: pre-wrap !important; }
-                div.stButton > button:hover { border: 2px solid #ff8c00 !important; background-color: #fffaf5 !important; }
-                div.stButton > button p { font-size: 16px !important; font-weight: 800 !important; line-height: 1.3 !important; color: #333; }
-                div.stButton > button[kind="primary"] { background-color: #28a745 !important; border: 3px solid #1e7e34 !important; }
-                div.stButton > button[kind="primary"] p { color: white !important; }
+                [data-testid="stVerticalBlockBorderWrapper"] > div > div { min-height: 250px !important; max-height: 250px !important; overflow-y: auto !important; }
+                div.stButton > button p { white-space: normal !important; word-wrap: break-word !important; font-size: 11px !important; font-weight: bold !important; }
             </style>""", unsafe_allow_html=True)
 
-            t1, t2 = st.tabs(["🏙️ INDORE CALLING", "🌍 OUTSTATION CALLING"])
+            cal = calendar.monthcalendar(y, midx)
+            cols_header = st.columns(7)
+            for j, d in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]): 
+                cols_header[j].markdown(f"<p style='text-align:center;font-weight:bold;color:#0056b3;'>{d}</p>", unsafe_allow_html=True)
 
-            def render_dashboard(df_part, mode):
-                mode_idx = 0 if mode == "Indore" else 1
-                total_pending = stats_data[6][mode_idx] if len(stats_data) > 6 else "0"
-                
-                st.markdown(f"""
-                    <div style="background-color:#ff8c00; padding:15px; border-radius:15px; text-align:center; margin-bottom:20px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-                        <p style="color:white; margin:0; font-size:14px; font-weight:bold;">{mode.upper()} TOTAL PENDING</p>
-                        <h1 style="color:white; margin:0; font-size:40px;">{total_pending}</h1>
-                    </div>
-                """, unsafe_allow_html=True)
+            for week in cal:
+                cols = st.columns(7)
+                for i, day in enumerate(week):
+                    if day != 0:
+                        with cols[i].container(border=True):
+                            st.markdown(f"<div style='text-align:right; font-weight:bold; color:#555;'>{day}</div>", unsafe_allow_html=True)
+                            
+                            day_data = month_df[month_df['D'].dt.day == day]
+                            for _, row in day_data.iterrows():
+                                is_rep = "Bike Reported" in str(row['R'])
+                                
+                                if is_rep:
+                                    b_c = "#28a745"
+                                elif row['D'].date() < today:
+                                    b_c = "#d9534f"
+                                else:
+                                    b_c = "#007bff"
+                                
+                                st.markdown(f"""<style>div.stButton > button[key="trig_{row['row']}"] {{ border: 2.5px solid {b_c} !important; min-height: 60px !important; margin-bottom: 5px !important; }}</style>""", unsafe_allow_html=True)
+                                
+                                if st.button(f"{'✅' if is_rep else '⭕'} {row['N']}", key=f"trig_{row['row']}", use_container_width=True):
+                                    app_sheet.update_cell(row['row'], 8, "Bike Reported" if not is_rep else "")
+                                    st.rerun()
+                    else:
+                        cols[i].markdown("<div style='height:100px; opacity:0.1;'></div>", unsafe_allow_html=True)
 
-                cols = st.columns(6)
-                svc_key = f"svc_sel_{mode}"
-                if svc_key not in st.session_state: st.session_state[svc_key] = "All"
+    except Exception as e: 
+        st.error(f"Calendar Error: {e}")
 
-                labels = ["1st", "2nd", "3rd", "4th", "5th", "6th"]
-                for i, label in enumerate(labels, 1):
-                    count_val = stats_data[i-1][mode_idx] if len(stats_data) > i-1 else "0"
-                    is_sel = st.session_state[svc_key] == str(i)
-                    display_text = f"{label} Service\nPending: {count_val}"
-                    btn_type = "primary" if is_sel else "secondary"
-                    
-                    if cols[i-1].button(display_text, key=f"btn_{mode}_{i}", type=btn_type):
-                        st.session_state[svc_key] = "All" if is_sel else str(i)
-                        st.rerun()
-
-                current = st.session_state[svc_key]
-                final_df = df_part if current == "All" else df_part[df_part["Service Count"].astype(str).str.startswith(current)]
-
-                if final_df.empty:
-                    st.info(f"No {current if current != 'All' else ''} pending calls.")
-                else:
-                    st.write(f"📋 Showing **{len(final_df)}** records")
-                    edited = st.data_editor(
-                        final_df, use_container_width=True, height=500,
-                        disabled=[c for c in final_df.columns if c not in ["Remark"]],
-                        column_config={"__row": None, "Remark": st.column_config.TextColumn(width="large")},
-                        key=f"ed_{mode}_{current}"
-                    )
-
-                    if st.button("💾 SAVE ALL CHANGES", key=f"save_btn_{mode}_{current}", type="primary"):
-                        updates_count = 0
-                        with st.spinner("⏳ Saving to Google Sheets..."):
-                            fresh_call_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
-                            for r in range(len(final_df)):
-                                if edited.iloc[r]["Remark"] != final_df.iloc[r]["Remark"]:
-                                    row_to_update = int(edited.iloc[r]["__row"])
-                                    new_remark = edited.iloc[r]["Remark"]
-                                    fresh_call_sheet.update(f"T{row_to_update}", [[new_remark]])
-                                    updates_count += 1
-                        
-                        if updates_count > 0:
-                            st.success(f"✅ {updates_count} records updated successfully!")
-                            load_calling_data.clear() 
-                            import time
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.info("No new changes detected to save.")
-
-            with t1: render_dashboard(df_filtered[df_filtered["City"].str.lower() == "indore"], "Indore")
-            with t2: render_dashboard(df_filtered[df_filtered["City"].str.lower() != "indore"], "Outstation")
-
-        except Exception as e:
-            st.error(f"🔴 System Error: {str(e)}")
-
-    # ==========================================
-    # 3️⃣ MODULE: VOC (Voice of Customer)
-    # ==========================================
-    elif crm_nav == "🗣️ VOC":
-        st.subheader("🗣️ Voice of Customer (VOC)")
-        st.info("🚧 VOC Dashboard is currently under construction. Please add your sheet connection and logic here.")
 # ------------------------------------------
-# TAB 3: KPI DASHBOARD 
+# TAB 3: SERVICE CALLING (BUG FIXED)
+# ------------------------------------------
+with tab_call:
+    try:
+        dash_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
+
+        # 1. LOAD DATA (SIRF DATA CACHE HOGA, CONNECTION NAHI)
+        @st.cache_data(ttl=60)
+        def load_calling_data():
+            d_sheet = connect_sheet_by_url(dash_url, "Dashboard")
+            m_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
+            # Connection return nahi kar rahe, sirf data return kar rahe hain
+            return d_sheet.get("F2:G8"), m_sheet.get_all_values()
+
+        stats_data, raw_data = load_calling_data()
+
+        # 2. DATA CLEANING
+        df_raw = pd.DataFrame(raw_data[1:], columns=raw_data[0])
+        df = df_raw.loc[:, ~df_raw.columns.duplicated()].copy() 
+        df["__row"] = df.index + 2
+        
+        target_col = "Sold by Other Dealer" 
+        mask = (df["Status"].str.lower().str.contains("pending", na=False)) & \
+               (df[target_col].fillna("").str.strip() == "")
+        df_filtered = df[mask]
+
+        # 3. UI STYLING (Green Button Setup)
+        st.markdown("""<style>
+            div.stButton > button { 
+                width: 100%; height: 110px !important; border-radius: 15px; 
+                background-color: white; border: 1px solid #ddd; transition: 0.3s;
+                white-space: pre-wrap !important;
+            }
+            div.stButton > button:hover { border: 2px solid #ff8c00 !important; background-color: #fffaf5 !important; }
+            div.stButton > button p {
+                font-size: 16px !important; font-weight: 800 !important;
+                line-height: 1.3 !important; color: #333;
+            }
+            div.stButton > button[kind="primary"] {
+                background-color: #28a745 !important;
+                border: 3px solid #1e7e34 !important;
+            }
+            div.stButton > button[kind="primary"] p {
+                color: white !important;
+            }
+        </style>""", unsafe_allow_html=True)
+
+        t1, t2 = st.tabs(["🏙️ INDORE CALLING", "🌍 OUTSTATION CALLING"])
+
+        def render_dashboard(df_part, mode):
+            mode_idx = 0 if mode == "Indore" else 1
+            
+            total_pending = stats_data[6][mode_idx] if len(stats_data) > 6 else "0"
+            st.markdown(f"""
+                <div style="background-color:#ff8c00; padding:15px; border-radius:15px; text-align:center; margin-bottom:20px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                    <p style="color:white; margin:0; font-size:14px; font-weight:bold;">{mode.upper()} TOTAL PENDING</p>
+                    <h1 style="color:white; margin:0; font-size:40px;">{total_pending}</h1>
+                </div>
+            """, unsafe_allow_html=True)
+
+            cols = st.columns(6)
+            svc_key = f"svc_sel_{mode}"
+            if svc_key not in st.session_state: st.session_state[svc_key] = "All"
+
+            labels = ["1st", "2nd", "3rd", "4th", "5th", "6th"]
+            for i, label in enumerate(labels, 1):
+                count_val = stats_data[i-1][mode_idx] if len(stats_data) > i-1 else "0"
+                is_sel = st.session_state[svc_key] == str(i)
+                display_text = f"{label} Service\nPending: {count_val}"
+                
+                # Green selection logic
+                btn_type = "primary" if is_sel else "secondary"
+                
+                if cols[i-1].button(display_text, key=f"btn_{mode}_{i}", type=btn_type):
+                    st.session_state[svc_key] = "All" if is_sel else str(i)
+                    st.rerun()
+
+            current = st.session_state[svc_key]
+            final_df = df_part if current == "All" else df_part[df_part["Service Count"].astype(str).str.startswith(current)]
+
+            if final_df.empty:
+                st.info(f"No {current if current != 'All' else ''} pending calls.")
+            else:
+                st.write(f"📋 Showing **{len(final_df)}** records")
+                edited = st.data_editor(
+                    final_df, 
+                    use_container_width=True, height=500,
+                    disabled=[c for c in final_df.columns if c not in ["Remark"]],
+                    column_config={"__row": None, "Remark": st.column_config.TextColumn(width="large")},
+                    key=f"ed_{mode}_{current}"
+                )
+
+                # --- 🚀 MANUAL SAVE (NO LAG, FRESH CONNECTION) ---
+                if st.button("💾 SAVE ALL CHANGES", key=f"save_btn_{mode}_{current}", type="primary"):
+                    updates_count = 0
+                    
+                    with st.spinner("⏳ Saving to Google Sheets..."):
+                        # 🔥 SABSE BADA FIX: Yahan ekdum fresh connection open kar rahe hain
+                        fresh_call_sheet = connect_sheet_by_url(dash_url, "Main Service Sheet")
+                        
+                        for r in range(len(final_df)):
+                            if edited.iloc[r]["Remark"] != final_df.iloc[r]["Remark"]:
+                                row_to_update = int(edited.iloc[r]["__row"])
+                                new_remark = edited.iloc[r]["Remark"]
+                                
+                                fresh_call_sheet.update(f"T{row_to_update}", [[new_remark]])
+                                updates_count += 1
+                    
+                    if updates_count > 0:
+                        st.success(f"✅ {updates_count} records updated successfully!")
+                        load_calling_data.clear() 
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.info("No new changes detected to save.")
+
+        with t1: render_dashboard(df_filtered[df_filtered["City"].str.lower() == "indore"], "Indore")
+        with t2: render_dashboard(df_filtered[df_filtered["City"].str.lower() != "indore"], "Outstation")
+
+    except Exception as e:
+        st.error(f"🔴 System Error: {str(e)}")
+
+# ------------------------------------------
+# TAB 4: KPI DASHBOARD (COMPLETE FIXED CODE)
 # ------------------------------------------
 with tab_kpi:
     try:
@@ -583,7 +472,6 @@ with tab_kpi:
             neg_scores = [safe_float(kpi_data[i][5]) for i in [13, 14] if i < len(kpi_data)]
             total_sum = sum(main_scores) + sum(neg_scores)
 
-            # --- TOP TILE (COMPACT) ---
             st.markdown(f"""
                 <div style="background-color:#0056b3; padding:5px 10px; border-radius:10px; text-align:center; border: 2px solid #FFD700; margin-bottom:10px;">
                     <p style="color:white; margin:0; font-size:14px; font-weight:bold;">🏆 TOTAL KPI SCORE (Q2)</p>
@@ -593,7 +481,6 @@ with tab_kpi:
 
             s1, s2 = st.tabs(["🎯 SCORE BOARD", "📊 QUARTERLY STATS"])
 
-            # --- TAB 1: SCORE BOARD (WITH COLUMN I) ---
             with s1:
                 st.subheader("Quarter 2: Achievement Score")
                 main_html = """<table style="width:100%; border-collapse: collapse; color: black; margin-bottom:20px;">
@@ -649,7 +536,6 @@ with tab_kpi:
                 neg_html += "</table>"
                 st.markdown(neg_html, unsafe_allow_html=True)
 
-            # --- TAB 2: QUARTERLY STATS ---
             with s2:
                 st.subheader("📊 Q2 STATS")
                 stats_html = """<table style="width:100%; border-collapse: collapse; color: black;">
@@ -670,8 +556,7 @@ with tab_kpi:
                                       f'<td style="padding:8px; border:1px solid #ddd;">{r[16]}</td>' \
                                       f'<td style="padding:8px; border:1px solid #ddd;">{r[17]}</td>' \
                                       f'</tr>'
-                    except: 
-                        pass
+                    except: pass
                 stats_html += "</table>"
                 st.markdown(stats_html, unsafe_allow_html=True)
 
@@ -681,8 +566,7 @@ with tab_kpi:
                 try:
                     jc_needed = kpi_data[1][25]
                     st.markdown(f'<div style="background-color:#fff3cd; padding:8px 15px; border-radius:8px; border: 1px solid #ffa000; display: inline-block; margin-bottom:15px;"><span style="color:#856404; font-weight:bold;">🎯 JC NEEDED TO CLOSE: </span><span style="color:#000; font-size:18px; font-weight:bold;">{jc_needed}</span></div>', unsafe_allow_html=True)
-                except: 
-                    pass
+                except: pass
 
                 growth_rows = [kpi_data[i] for i in range(2, 16) if i < len(kpi_data) and kpi_data[i][21].strip()]
                 
@@ -708,9 +592,8 @@ with tab_kpi:
 
     except Exception as e:
         st.error(f"🔴 KPI Error: {e}")
-
 # ==========================================
-# TAB 4: PARTS 
+# MAIN TAB 5: PARTS (STABLE VERSION)
 # ==========================================
 with tab_parts:
     # 1. SHARED FUNCTIONS
@@ -782,10 +665,6 @@ with tab_parts:
         # --- SUB TABS ---
         p_sub1, p_sub2, p_sub3 = st.tabs(["📊 Purchase & Sale", "🔄 Dealer Transfer", "📦 Inventory"])
 
-
-
-
-
         with p_sub1:
             def excel_style(row):
                 m = str(row.iloc[0]).upper().strip()
@@ -841,11 +720,6 @@ with tab_parts:
                     st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown('</div>', unsafe_allow_html=True)
-
-
-
-
-
 
         with p_sub2:
             try:
@@ -991,9 +865,8 @@ with tab_parts:
 
     except Exception as e:
         st.error(f"🔴 Main Error: {e}")
-
 # ==========================================
-# TAB 5: BIKE PARKED 
+# MAIN TAB 6: BIKE PARKED (FLEET & RETENTION)
 # ==========================================
 with tab_parked:
     try:
@@ -1196,462 +1069,3 @@ with tab_parked:
 
     except Exception as e:
         st.error(f"🔴 Bike Parked Data Error: {str(e)}")
-
-# ==========================================
-# 6. REVENUE TAB (STRUCTURE ONLY)
-# ==========================================
-with tab_rev:
-    st.title("💰 Revenue Analytics")
-    
-    # Sub-tabs create karna
-    st_rev_1, st_rev_2= st.tabs([
-        "📅 CURRENT MONTH", 
-        "📊 YoY COMPARISON", 
-                   
-    ])
-
-    # --- SUB TAB 1: CURRENT MONTH ---
-    with st_rev_1:
-        
-        # 🗓️ MONTH & YEAR SELECTOR
-        col_m, col_y, _ = st.columns([1, 1, 3]) 
-        with col_m:
-            months_list = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            current_m_idx = datetime.now().month - 1
-            sel_month = st.selectbox("📅 Select Month", months_list, index=current_m_idx)
-        with col_y:
-            sel_year = st.selectbox("🗓️ Select Year", [2025, 2026, 2027], index=1) # 2026 default
-
-        # 🔄 DYNAMIC DATES CALCULATION
-        m_num = months_list.index(sel_month) + 1
-        start_dt = pd.to_datetime(f"{sel_year}-{m_num:02d}-01")
-        
-        
-        report_dates = pd.date_range(start=start_dt, end=start_dt + pd.offsets.MonthEnd(0))
-        
-        start_date_range = report_dates[0].strftime("%d %b %Y")
-        end_date_range = report_dates[-1].strftime("%d %b %Y")
-        
-        # 1. 🏆 PREMIUM STYLED TITLE
-        st.markdown(f"""
-            <div style="
-                background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%);
-                padding: 20px;
-                border-radius: 15px;
-                text-align: center;
-                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
-                margin-top: 10px;
-                margin-bottom: 30px;
-                border: 2px solid #000;
-            ">
-                <h1 style="color: white; margin: 0; font-size: 28px; font-family: 'Segoe UI', sans-serif;">
-                    MUNICH MOTORRAD INDORE W/S REPORT
-                </h1>
-                <p style="color: #e0e7ff; margin: 5px 0 0 0; font-size: 18px; font-weight: 500;">
-                    Period: {start_date_range} to {end_date_range}
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        url_2026 = "https://docs.google.com/spreadsheets/d/1XYZWk94-RCqABmzCd40-v6RLlXcwbOaxPMK9jE8x9No/edit"
-        ws_2026 = connect_sheet_by_url(url_2026, "2026")
-
-        if ws_2026:
-            raw_data = ws_2026.get_all_values()
-            
-            if len(raw_data) > 1:
-                headers = [str(h).strip() for h in raw_data[0]]
-                df_2026 = pd.DataFrame(raw_data[1:], columns=headers)
-
-                # Column Config
-                col_date, col_vin, col_cat = 'Document Date', 'VIN #', 'Item Type'
-                col_labour_amt = 'Final Amount with tax'     # AN
-                col_parts_amt = 'Final Amount without tax'   # AG
-                col_dnp = 'DNP'                              # AT
-
-                if col_date in df_2026.columns:
-                    # 1. DATA CLEANING
-                    cols_to_clean = [col_cat, 'Type', 'Module Name', 'Customer Type', 'Part Type', 'Description']
-                    for col in cols_to_clean:
-                        if col in df_2026.columns:
-                            df_2026[col + '_Clean'] = df_2026[col].astype(str).str.strip().str.lower()
-                        else:
-                            df_2026[col + '_Clean'] = ''
-                    
-                    def clean_amt(series):
-                        return pd.to_numeric(series.astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
-                    
-                    df_2026['LabAmt'] = clean_amt(df_2026[col_labour_amt]) 
-                    df_2026['PartAmt'] = clean_amt(df_2026[col_parts_amt])
-                    df_2026['DnpAmt'] = clean_amt(df_2026[col_dnp])
-
-                    df_2026['Date_DT'] = pd.to_datetime(df_2026[col_date], format='mixed', dayfirst=True, errors='coerce').dt.date
-                    df_2026['VIN_Clean'] = df_2026[col_vin].astype(str).str.strip().str.upper()
-                    invalid_vins = {'', 'NAN', 'NONE', '- NONE -'}
-
-                    rows = []
-
-                    # Calculate Table 1 (Throughput)
-                    for d in report_dates:
-                        target_date = d.date()
-                        df_day = df_2026[df_2026['Date_DT'] == target_date]
-                        day_vins = df_day[~df_day['VIN_Clean'].isin(invalid_vins)]['VIN_Clean'].unique()
-                        ach_thru = len(day_vins)
-                        
-                        ach_lab = df_day.loc[df_day['Item Type_Clean'].isin(["labor", "warranty handling charges"]), 'LabAmt'].sum()
-                        ach_part = df_day.loc[df_day['Item Type_Clean'].isin(["parts", "part"]), 'PartAmt'].sum()
-
-                        rows.append({
-                            "Date": f"{d.month}/{d.day}/{d.year}",
-                            "T_Throughput": 3, "T_Labour": 7142, "T_Parts": 28571,
-                            "A_Throughput": ach_thru, "A_Labour": ach_lab, "A_Parts": ach_part,
-                            "G_Throughput": 3 - ach_thru, "G_Labour": 7142 - ach_lab, "G_Parts": 28571 - ach_part
-                        })
-
-                    df_data = pd.DataFrame(rows)
-                    total_row = {"Date": "Total"}
-                    for c in df_data.columns[1:]: total_row[c] = df_data[c].sum()
-                    df_final = pd.concat([pd.DataFrame([total_row]), df_data], ignore_index=True)
-                    df_final.columns = pd.MultiIndex.from_tuples([("", "Date"), ("Target", "Throughput"), ("Target", "Labour"), ("Target", "Parts"), ("Achievement", "Throughput"), ("Achievement", "Labour With Tax"), ("Achievement", "Parts W/O Tax"), ("Gap", "Throughput"), ("Gap", "Labour"), ("Gap", "Parts")])
-
-                    # 🎨 OPTIMIZED CSS 
-                    custom_css = [
-                        {'selector': 'table', 'props': [('border', '2px solid black'), ('border-collapse', 'collapse'), ('width', '100%'), ('margin-bottom', '20px'), ('font-size', '13px')]},
-                        {'selector': 'th', 'props': [('background-color', 'royalblue'), ('color', 'white'), ('font-weight', 'bold'), ('text-align', 'center'), ('border', '1px solid black'), ('padding', '6px 4px'), ('white-space', 'nowrap')]},
-                        {'selector': 'td', 'props': [('text-align', 'center'), ('border', '1px solid black'), ('padding', '6px 4px'), ('font-weight', '500'), ('white-space', 'nowrap')]}
-                    ]
-
-                    # --- SIDE BY SIDE LAYOUT START ---
-                    col1, col2 = st.columns([1.6, 1]) 
-
-                    with col1:
-                        st.markdown("### 📊 Monthly Achievement")
-                        fmt_map = {c: "{:.2f}" for c in df_final.columns[1:]}
-                        for c in df_final.columns:
-                            if 'Throughput' in c[1]: fmt_map[c] = "{:.0f}"
-                        
-                        styled_t1 = df_final.style.format(fmt_map).apply(lambda r: ['background-color: #8db4e2; font-weight: bold; color: black']*len(r) if r[("", "Date")] == "Total" else ['']*len(r), axis=1).set_table_styles(custom_css).hide(axis="index")
-                        
-                        st.markdown(f'<div style="overflow-x: auto; max-width: 100%;">{styled_t1.to_html()}</div>', unsafe_allow_html=True)
-
-                    with col2:
-                        st.markdown("### 💰 Monthly Revenue Summary")
-                        df_month = df_2026[df_2026['Date_DT'].isin([d.date() for d in report_dates])]
-                        try: tiles_sum = counts.get("Complete", 0) + counts.get("In Process", 0) + counts.get("On Hold", 0)
-                        except NameError: tiles_sum = 0
-
-                        # Vehicle Rec logic (Agar select kiya hua mahina current month nahi hai, to in-process wali tiles ko ignore karna better hai, par filhal wahi rakha hai)
-                        v_comp = df_data["A_Throughput"].sum()
-                        v_rec = v_comp + tiles_sum
-                        t_bikes = len(df_month[df_month['Description_Clean'].str.contains("oil filter", na=False) & df_month['VIN_Clean'].str.contains("WB", na=False)])
-
-                        def sm(t): return df_month['Type_Clean'].str.contains('invoice', na=False) if t == 'inv' else df_month['Customer Type_Clean'].str.contains(t, na=False)
-                        def get_rev(m_it, m_ct):
-                            mask = df_month['Item Type_Clean'].str.contains(m_it, na=False) & sm('inv') & sm(m_ct)
-                            return df_month.loc[mask, 'LabAmt'].sum(), df_month.loc[mask, 'PartAmt'].sum(), df_month.loc[mask, 'DnpAmt'].sum()
-
-                        ws_l_wt, ws_l_wot, _ = get_rev('labor', 'external')
-                        war_l1_wt, war_l1_wot, _ = get_rev('warranty handling', 'inv') 
-                        war_l2_wt, war_l2_wot, _ = get_rev('labor', 'warranty')
-                        war_l_wt, war_l_wot = war_l1_wt + war_l2_wt, war_l1_wot + war_l2_wot
-                        
-                        m_spare = df_month['Item Type_Clean'].str.contains('part', na=False)
-                        m_ws_p = df_month['Part Type_Clean'].str.contains('1 - normal|9 - miscelleneous|local', na=False)
-                        ws_s_wt = df_month.loc[m_spare & sm('external') & m_ws_p, 'LabAmt'].sum()
-                        ws_s_wot = df_month.loc[m_spare & sm('external') & m_ws_p, 'PartAmt'].sum()
-                        ws_s_dnp = df_month.loc[m_spare & sm('external') & m_ws_p, 'DnpAmt'].sum()
-                        
-                        war_s_wt = df_month.loc[m_spare & sm('warranty'), 'LabAmt'].sum()
-                        war_s_wot = df_month.loc[m_spare & sm('warranty'), 'PartAmt'].sum()
-                        war_s_dnp = df_month.loc[m_spare & sm('warranty'), 'DnpAmt'].sum()
-                        
-                        m_acc = df_month['Part Type_Clean'].str.contains('7 - bmw|3 - retrofit', na=False)
-                        acc_wt = df_month.loc[m_spare & sm('external') & m_acc, 'LabAmt'].sum()
-                        acc_wot = df_month.loc[m_spare & sm('external') & m_acc, 'PartAmt'].sum()
-                        acc_dnp = df_month.loc[m_spare & sm('external') & m_acc, 'DnpAmt'].sum()
-
-                        def f_v(v, dnp_l=False): return "" if (dnp_l or v==0) else f"₹ {v:,.2f}"
-                        
-                        summary_data = [
-                            {"Particulars": "Vehicle received", "With Tax": str(int(v_rec)), "Without Tax": "", "DNP": ""},
-                            {"Particulars": "Vehicle completed", "With Tax": str(int(v_comp)), "Without Tax": "", "DNP": ""},
-                            {"Particulars": "Total Bikes serviced", "With Tax": str(int(t_bikes)), "Without Tax": "", "DNP": ""},
-                            {"Particulars": "W/S LABOUR", "With Tax": f_v(ws_l_wt), "Without Tax": f_v(ws_l_wot), "DNP": ""},
-                            {"Particulars": "WARRANTY LABOUR", "With Tax": f_v(war_l_wt), "Without Tax": f_v(war_l_wot), "DNP": ""},
-                            {"Particulars": "TOTAL LABOUR", "With Tax": f_v(ws_l_wt+war_l_wt), "Without Tax": f_v(ws_l_wot+war_l_wot), "DNP": ""},
-                            {"Particulars": "W/S SPARE", "With Tax": f_v(ws_s_wt), "Without Tax": f_v(ws_s_wot), "DNP": f_v(ws_s_dnp)},
-                            {"Particulars": "WARRANTY SPARE", "With Tax": f_v(war_s_wt), "Without Tax": f_v(war_s_wot), "DNP": f_v(war_s_dnp)},
-                            {"Particulars": "TOTAL SPARE", "With Tax": f_v(ws_s_wt+war_s_wt), "Without Tax": f_v(ws_s_wot+war_s_wot), "DNP": f_v(ws_s_dnp+war_s_dnp)},
-                            {"Particulars": "TOTAL Acc & GG", "With Tax": f_v(acc_wt), "Without Tax": f_v(acc_wot), "DNP": f_v(acc_dnp)},
-                            {"Particulars": "GRAND REVENUE", "With Tax": f_v(ws_l_wt+war_l_wt+ws_s_wt+war_s_wt+acc_wt), "Without Tax": f_v(ws_l_wot+war_l_wot+ws_s_wot+war_s_wot+acc_wot), "DNP": f_v(ws_s_dnp+war_s_dnp+acc_dnp)}
-                        ]
-                        
-                        styled_t2 = pd.DataFrame(summary_data).style.apply(lambda r: ['background-color: #f0f2f6; font-weight: bold; color: black']*len(r) if "TOTAL" in r["Particulars"] or "GRAND" in r["Particulars"] else ['']*len(r), axis=1).set_table_styles(custom_css).hide(axis="index")
-                        
-                        st.markdown(f'<div style="overflow-x: auto; max-width: 100%;">{styled_t2.to_html()}</div>', unsafe_allow_html=True)
-                    
-                else: st.error("Document Date not found.")
-            else: st.warning("Sheet is empty.")
-        else: st.error("Connection Error.")
-
-# ==========================================
-    # 📈 TAB 2: YTD & YoY COMPARISON (2022 - 2026)
-    # ==========================================
-    with st_rev_2:
-        st.subheader("📊 Year on Year Comparison")
-        
-        col_v, col_p, _ = st.columns([1, 1, 2])
-        view_type = col_v.selectbox("View Type", ["Monthly", "Quarterly", "Half Yearly", "Annually"])
-        
-        # 🛠️ FIX: Yahan default_index ko pehle hi 0 assign kar dein
-        default_index = 0 
-        
-        if view_type == "Monthly":
-            options = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-            current_month_str = datetime.now().strftime("%b")
-            if current_month_str in options:
-                default_index = options.index(current_month_str)
-        elif view_type == "Quarterly":
-            options = ["Q1 (Jan-Mar)", "Q2 (Apr-Jun)", "Q3 (Jul-Sep)", "Q4 (Oct-Dec)"]
-        elif view_type == "Half Yearly":
-            options = ["H1 (Jan-Jun)", "H2 (Jul-Dec)"]
-        else:
-            options = ["Full Year"]
-            
-        selected_period = col_p.selectbox("Select Period", options, index=default_index)
-
-        # --- 1. DIRECT DATA FETCH ---
-        url_master = "https://docs.google.com/spreadsheets/d/1XYZWk94-RCqABmzCd40-v6RLlXcwbOaxPMK9jE8x9No/edit"
-        
-        if 'summary_sheet_data' not in st.session_state:
-            with st.spinner("Fetching Pre-Calculated Summary from Sheet..."):
-                ws_sum = connect_sheet_by_url(url_master, "SImple Format Without Tax")
-                if ws_sum:
-                    st.session_state['summary_sheet_data'] = ws_sum.get_all_values()
-                else:
-                    st.session_state['summary_sheet_data'] = []
-
-        raw_data = st.session_state.get('summary_sheet_data', [])
-
-        year_cols = {'2022': (2, 3), '2023': (4, 5), '2024': (6, 7), '2025': (8, 9), '2026': (10, 11)}
-        years_to_fetch = list(year_cols.keys())
-        month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        
-        parsed_data = {y: {m: {'spare': 0, 'acc': 0, 'war': 0, 'lab': 0, 'jc': 0, 'srv': 0} for m in month_names} for y in years_to_fetch}
-
-        # --- 2. PARSING LOGIC ---
-        def clean_val(v):
-            try:
-                return float(str(v).replace(',', '').replace('₹', '').strip())
-            except:
-                return 0.0
-
-        def extract_jc_srv(txt):
-            match = re.search(r'JC Closed\s*-\s*(\d+)[,\s]*Service Done\s*-\s*(\d+)', str(txt), re.IGNORECASE)
-            if match:
-                return int(match.group(1)), int(match.group(2))
-            return 0, 0
-
-        current_month = None
-
-        if raw_data:
-            for row in raw_data:
-                if len(row) < 12: continue
-                
-                m_val = str(row[0]).strip()
-                if m_val in month_names:
-                    current_month = m_val
-                    
-                category = str(row[1]).strip()
-                
-                if current_month and category in ['Spare Parts', 'ACC & GG', 'Warranty Spare Parts', 'Labor']:
-                    for y, (val_col, txt_col) in year_cols.items():
-                        amt = clean_val(row[val_col])
-                        
-                        if category == 'Spare Parts': parsed_data[y][current_month]['spare'] = amt
-                        elif category == 'ACC & GG': parsed_data[y][current_month]['acc'] = amt
-                        elif category == 'Warranty Spare Parts': parsed_data[y][current_month]['war'] = amt
-                        elif category == 'Labor':
-                            parsed_data[y][current_month]['lab'] = amt
-                            jc_count, srv_count = extract_jc_srv(row[txt_col])
-                            parsed_data[y][current_month]['jc'] = jc_count
-                            parsed_data[y][current_month]['srv'] = srv_count
-
-        # --- 3. AGGREGATING FOR SELECTED PERIOD ---
-        month_map_nums = {"Jan": [1], "Feb": [2], "Mar": [3], "Apr": [4], "May": [5], "Jun": [6], "Jul": [7], "Aug": [8], "Sep": [9], "Oct": [10], "Nov": [11], "Dec": [12],
-                     "Q1 (Jan-Mar)": [1,2,3], "Q2 (Apr-Jun)": [4,5,6], "Q3 (Jul-Sep)": [7,8,9], "Q4 (Oct-Dec)": [10,11,12],
-                     "H1 (Jan-Jun)": [1,2,3,4,5,6], "H2 (Jul-Dec)": [7,8,9,10,11,12], "Full Year": list(range(1, 13))}
-        
-        target_month_nums = month_map_nums.get(selected_period, [])
-        num_to_name = {i+1: name for i, name in enumerate(month_names)}
-        target_month_names = [num_to_name[m] for m in target_month_nums]
-
-        agg_data = {}
-        for y in years_to_fetch:
-            s_sum = sum(parsed_data[y][m]['spare'] for m in target_month_names)
-            a_sum = sum(parsed_data[y][m]['acc'] for m in target_month_names)
-            w_sum = sum(parsed_data[y][m]['war'] for m in target_month_names)
-            l_sum = sum(parsed_data[y][m]['lab'] for m in target_month_names)
-            
-            jc_sum = sum(parsed_data[y][m]['jc'] for m in target_month_names)
-            srv_sum = sum(parsed_data[y][m]['srv'] for m in target_month_names)
-            
-            agg_data[y] = {
-                'spare': s_sum, 'acc': a_sum, 'war_spare': w_sum, 'labor': l_sum,
-                'total_parts': s_sum + a_sum + w_sum,
-                'jc_text': f"JC Closed - {jc_sum}, Service Done - {srv_sum}" if (jc_sum > 0 or srv_sum > 0) else ""
-            }
-
-        # ==========================================
-        # 🚀 4. DYNAMIC METRIC CARDS
-        # ==========================================
-        if raw_data:
-            cy_rev = agg_data['2026']['total_parts'] + agg_data['2026']['labor']
-            py_rev = agg_data['2025']['total_parts'] + agg_data['2025']['labor']
-            
-            if py_rev > 0:
-                delta_pct = ((cy_rev - py_rev) / py_rev) * 100
-                delta_str = f"{delta_pct:.2f}%"
-            else:
-                delta_str = "0%"
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            col_y1, col_y2 = st.columns(2)
-            
-            col_y1.metric(f"Current Year (2026) - {selected_period}", f"₹ {cy_rev:,.0f}", delta=delta_str)
-            col_y2.metric(f"Previous Year (2025) - {selected_period}", f"₹ {py_rev:,.0f}")
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            st.write("📊 **Comparison Summary**")
-
-            # --- 5. HTML TABLE GENERATION ---
-            clr_spare, clr_acc, clr_war, clr_lab, clr_head = "#e2f0d9", "#dae3f3", "#fce4d6", "#ffffff", "#f0f2f6"
-            label_disp = selected_period.split()[0]
-
-            html_table = f"""
-            <div style="overflow-x: auto; margin-top: 10px;">
-                <table style="border-collapse: collapse; width: 100%; text-align: center; font-family: sans-serif; font-size: 13px; border: 2px solid black;">
-                    <thead>
-                        <tr>
-                            <th style="border: 1px solid black; background-color: {clr_head}; width: 50px;"></th>
-                            <th style="border: 1px solid black; background-color: {clr_head}; width: 150px;"></th>
-            """
-            for y in years_to_fetch:
-                html_table += f'<th colspan="2" style="border: 1px solid black; background-color: {clr_head}; font-weight: bold; font-size: 15px; padding: 8px;">{y}</th>'
-            
-            html_table += "</tr></thead><tbody>"
-
-            def get_row(label, key, color, has_total=False):
-                row_html = f'<tr>'
-                if label == "Spare Parts":
-                    row_html += f'<td rowspan="4" style="border: 1px solid black; font-weight: bold; vertical-align: middle; background: white;">{label_disp}</td>'
-                
-                row_html += f'<td style="border: 1px solid black; background-color: {color}; text-align: left; padding-left: 10px; font-weight: 500;">{label}</td>'
-                for y in years_to_fetch:
-                    val = agg_data[y][key]
-                    row_html += f'<td style="border: 1px solid black; background-color: {color}; padding: 6px;">{val:,.0f}</td>'
-                    if has_total:
-                        tot = agg_data[y]['total_parts']
-                        row_html += f'<td rowspan="3" style="border: 1px solid black; background-color: #e2f0d9; font-weight: bold; vertical-align: middle; font-size: 14px;">{tot:,.0f}</td>'
-                return row_html + "</tr>"
-
-            html_table += get_row("Spare Parts", "spare", clr_spare, True)
-            html_table += get_row("ACC & GG", "acc", clr_acc)
-            html_table += get_row("Warranty Spare Parts", "war_spare", clr_war)
-            
-            html_table += f'<tr><td style="border: 1px solid black; background-color: {clr_lab}; text-align: left; padding-left: 10px;">Labor</td>'
-            for y in years_to_fetch:
-                val, txt = agg_data[y]['labor'], agg_data[y]['jc_text']
-                html_table += f'<td style="border: 1px solid black; background-color: {clr_lab}; padding: 6px;">{val:,.0f}</td>'
-                html_table += f'<td style="border: 1px solid black; background-color: {clr_lab}; font-size: 11px;">{txt}</td>'
-            html_table += "</tr></tbody></table></div>"
-
-            st.markdown(html_table, unsafe_allow_html=True)
-
-            # ==========================================
-            # 📉 6. GAP ANALYSIS TABLE (N2:U6)
-            # ==========================================
-            if len(raw_data) >= 6:
-                st.markdown("<br><h3>📉 Overall Gap Analysis</h3>", unsafe_allow_html=True)
-                
-                gap_html = f"""
-                <div style="overflow-x: auto; margin-top: 10px;">
-                    <table style="border-collapse: collapse; width: 100%; font-family: sans-serif; font-size: 14px; border: 2px solid black;">
-                        <thead>
-                            <tr>
-                """
-                
-                header_row = raw_data[1]
-                if len(header_row) < 21:
-                    header_row += [""] * (21 - len(header_row))
-                    
-                for i, h in enumerate(header_row[13:21]):
-                    bg = "#ffff00" if i == 5 else "#f0f2f6" 
-                    gap_html += f'<th style="border: 1px solid black; background-color: {bg}; font-weight: bold; padding: 8px; text-align: center;">{h}</th>'
-                    
-                gap_html += "</tr></thead><tbody>"
-                
-                for row in raw_data[2:6]:
-                    if len(row) < 21:
-                        row += [""] * (21 - len(row))
-                        
-                    gap_html += "<tr>"
-                    for i, val in enumerate(row[13:21]):
-                        bg = "#ffff00" if i == 5 else "#ffffff"
-                        align = "left" if i == 0 else "right"
-                        fw = "bold" if i == 0 else "normal"
-                        gap_html += f'<td style="border: 1px solid black; background-color: {bg}; padding: 6px; text-align: {align}; font-weight: {fw};">{val}</td>'
-                    gap_html += "</tr>"
-                    
-                gap_html += "</tbody></table></div>"
-                st.markdown(gap_html, unsafe_allow_html=True)
-
-            # ==========================================
-            # 📈 7. YoY COMPARISON % TABLE (N10:R14)
-            # ==========================================
-            if len(raw_data) >= 14:
-                st.markdown("<br><h3>📈 YoY Comparison (%)</h3>", unsafe_allow_html=True)
-                
-                comp_html = f"""
-                <div style="overflow-x: auto; margin-top: 10px;">
-                    <table style="border-collapse: collapse; width: 100%; font-family: sans-serif; font-size: 14px; border: 2px solid black;">
-                        <thead>
-                            <tr>
-                """
-                
-                # Headers from Row 10 (index 9)
-                header_row_2 = raw_data[9]
-                if len(header_row_2) < 18:
-                    header_row_2 += [""] * (18 - len(header_row_2))
-                    
-                for i, h in enumerate(header_row_2[13:18]):
-                    comp_html += f'<th style="border: 1px solid black; background-color: #f0f2f6; font-weight: bold; padding: 8px; text-align: center;">{h}</th>'
-                    
-                comp_html += "</tr></thead><tbody>"
-                
-                # Data Rows from Row 11 to 14 (index 10 to 14)
-                for row in raw_data[10:14]:
-                    if len(row) < 18:
-                        row += [""] * (18 - len(row))
-                        
-                    comp_html += "<tr>"
-                    for i, val in enumerate(row[13:18]):
-                        align = "left" if i == 0 else "right"
-                        fw = "bold" if i == 0 else "normal"
-                        
-                        # Smart Color Logic for Percentages
-                        text_color = "black"
-                        if "%" in str(val):
-                            if "-" in str(val):
-                                text_color = "#d9534f" # Red for drop
-                            else:
-                                text_color = "#28a745" # Green for growth
-                                
-                        comp_html += f'<td style="border: 1px solid black; background-color: #ffffff; padding: 6px; text-align: {align}; font-weight: {fw}; color: {text_color};">{val}</td>'
-                    comp_html += "</tr>"
-                    
-                comp_html += "</tbody></table></div>"
-                st.markdown(comp_html, unsafe_allow_html=True)
-
-        else:
-            st.error("Sheet data could not be loaded. Please check the sheet name and access.")
