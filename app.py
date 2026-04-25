@@ -1348,7 +1348,7 @@ with tab_rev:
                             mask = df_month['Item Type_Clean'].str.contains(m_it, na=False) & sm('inv') & sm(m_ct)
                             return df_month.loc[mask, 'LabAmt'].sum(), df_month.loc[mask, 'PartAmt'].sum(), df_month.loc[mask, 'DnpAmt'].sum()
 
-                        ws_l_wt, ws_l_wot, _ = get_rev('labor', 'external')
+                        mask_ws_labour = df_month['Item Type_Clean'].str.contains('labor', na=False) & df_month['Customer Type_Clean'].str.contains('external', na=False) ws_l_wt = df_month.loc[mask_ws_labour, 'LabAmt'].sum() ws_l_wot = df_month.loc[mask_ws_labour, 'PartAmt'].sum()
                         war_l1_wt, war_l1_wot, _ = get_rev('warranty handling', 'inv') 
                         war_l2_wt, war_l2_wot, _ = get_rev('labor', 'warranty')
                         war_l_wt, war_l_wot = war_l1_wt + war_l2_wt, war_l1_wot + war_l2_wot
