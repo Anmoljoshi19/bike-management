@@ -1546,16 +1546,16 @@ elif st.session_state['active_section'] == 'Service':
                 else: st.warning("Sheet is empty.")
             else: st.error("Connection Error.")
 
-    # ==========================================
+        # ==========================================
         # 📈 TAB 6-2: YTD & YoY COMPARISON (2022 - 2026)
         # ==========================================
         with st_rev_2:
             st.subheader("📊 Year on Year Comparison")
             
+
             col_v, col_p, _ = st.columns([1, 1, 2])
             view_type = col_v.selectbox("View Type", ["Monthly", "Quarterly", "Half Yearly", "Annually"])
             
-            # 🛠️ FIX: Yahan default_index ko pehle hi 0 assign kar dein
             default_index = 0 
             
             if view_type == "Monthly":
@@ -1589,16 +1589,19 @@ elif st.session_state['active_section'] == 'Service':
             years_to_fetch = list(year_cols.keys())
             month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
             
-            parsed_data = {y: {m: {'spare': 0, 'acc': 0, 'war': 0, 'lab': 0, 'jc': 0, 'srv': 0} for m in month_names} for y in years_to_fetch}
+            # 🛠️ ADDED 'local' KEY HERE
+            parsed_data = {y: {m: {'spare': 0, 'local': 0, 'acc': 0, 'war': 0, 'lab': 0, 'jc': 0, 'srv': 0} for m in month_names} for y in years_to_fetch}
 
-            # --- 2. PARSING LOGIC ---
+            # --- 2. BULLETPROOF PARSING LOGIC ---
             def clean_val(v):
+                if not v: return 0.0
                 try:
                     return float(str(v).replace(',', '').replace('₹', '').strip())
                 except:
                     return 0.0
 
             def extract_jc_srv(txt):
+                if not txt: return 0, 0
                 match = re.search(r'JC Closed\s*-\s*(\d+)[,\s]*Service Done\s*-\s*(\d+)', str(txt), re.IGNORECASE)
                 if match:
                     return int(match.group(1)), int(match.group(2))
@@ -1608,24 +1611,32 @@ elif st.session_state['active_section'] == 'Service':
 
             if raw_data:
                 for row in raw_data:
-                    if len(row) < 12: continue
+                    # 🛠️ YAHAN FIX KIYA HAI: Pehle < 12 tha, ab < 2 kiya hai taaki khali cells wali row skip na ho!
+                    if len(row) < 2: continue
                     
                     m_val = str(row[0]).strip()
                     if m_val in month_names:
                         current_month = m_val
                         
-                    category = str(row[1]).strip()
+                    # Lowercase se match karenge taaki spelling mismatch na ho
+                    category = str(row[1]).strip().lower()
                     
-                    if current_month and category in ['Spare Parts', 'ACC & GG', 'Warranty Spare Parts', 'Labor']:
+                    if current_month:
                         for y, (val_col, txt_col) in year_cols.items():
-                            amt = clean_val(row[val_col])
+                            # Agar us column me value nahi mili, toh error dene ki bajaye 0.0 maan lega
+                            amt = clean_val(row[val_col]) if val_col < len(row) else 0.0
                             
-                            if category == 'Spare Parts': parsed_data[y][current_month]['spare'] = amt
-                            elif category == 'ACC & GG': parsed_data[y][current_month]['acc'] = amt
-                            elif category == 'Warranty Spare Parts': parsed_data[y][current_month]['war'] = amt
-                            elif category == 'Labor':
+                            if category == 'spare parts': 
+                                parsed_data[y][current_month]['spare'] = amt
+                            elif category == 'local parts': # Yahan Local Parts catch hoga
+                                parsed_data[y][current_month]['local'] = amt
+                            elif category in ['acc & gg', 'acc & gg']: 
+                                parsed_data[y][current_month]['acc'] = amt
+                            elif category in ['warranty spare parts', 'warranty parts']: 
+                                parsed_data[y][current_month]['war'] = amt
+                            elif category in ['labor', 'labour (with tax)']:
                                 parsed_data[y][current_month]['lab'] = amt
-                                jc_count, srv_count = extract_jc_srv(row[txt_col])
+                                jc_count, srv_count = extract_jc_srv(row[txt_col]) if txt_col < len(row) else (0, 0)
                                 parsed_data[y][current_month]['jc'] = jc_count
                                 parsed_data[y][current_month]['srv'] = srv_count
 
@@ -1641,6 +1652,7 @@ elif st.session_state['active_section'] == 'Service':
             agg_data = {}
             for y in years_to_fetch:
                 s_sum = sum(parsed_data[y][m]['spare'] for m in target_month_names)
+                loc_sum = sum(parsed_data[y][m]['local'] for m in target_month_names) # 🛠️ ADDED LOCAL SUM
                 a_sum = sum(parsed_data[y][m]['acc'] for m in target_month_names)
                 w_sum = sum(parsed_data[y][m]['war'] for m in target_month_names)
                 l_sum = sum(parsed_data[y][m]['lab'] for m in target_month_names)
@@ -1649,8 +1661,8 @@ elif st.session_state['active_section'] == 'Service':
                 srv_sum = sum(parsed_data[y][m]['srv'] for m in target_month_names)
                 
                 agg_data[y] = {
-                    'spare': s_sum, 'acc': a_sum, 'war_spare': w_sum, 'labor': l_sum,
-                    'total_parts': s_sum + a_sum + w_sum,
+                    'spare': s_sum, 'local': loc_sum, 'acc': a_sum, 'war_spare': w_sum, 'labor': l_sum,
+                    'total_parts': s_sum + loc_sum + a_sum + w_sum, # 🛠️ INCLUDED LOCAL IN TOTAL
                     'jc_text': f"JC Closed - {jc_sum}, Service Done - {srv_sum}" if (jc_sum > 0 or srv_sum > 0) else ""
                 }
 
@@ -1677,7 +1689,8 @@ elif st.session_state['active_section'] == 'Service':
                 st.write("📊 **Comparison Summary**")
 
                 # --- 5. HTML TABLE GENERATION ---
-                clr_spare, clr_acc, clr_war, clr_lab, clr_head = "#e2f0d9", "#dae3f3", "#fce4d6", "#ffffff", "#f0f2f6"
+                # 🛠️ ADDED clr_loc
+                clr_spare, clr_loc, clr_acc, clr_war, clr_lab, clr_head = "#e2f0d9", "#fff2cc", "#dae3f3", "#fce4d6", "#ffffff", "#f0f2f6"
                 label_disp = selected_period.split()[0]
 
                 html_table = f"""
@@ -1696,18 +1709,21 @@ elif st.session_state['active_section'] == 'Service':
                 def get_row(label, key, color, has_total=False):
                     row_html = f'<tr>'
                     if label == "Spare Parts":
-                        row_html += f'<td rowspan="4" style="border: 1px solid black; font-weight: bold; vertical-align: middle; background: white;">{label_disp}</td>'
+                        # 🛠️ INCREASED ROWSPAN TO 5
+                        row_html += f'<td rowspan="5" style="border: 1px solid black; font-weight: bold; vertical-align: middle; background: white;">{label_disp}</td>'
                     
                     row_html += f'<td style="border: 1px solid black; background-color: {color}; text-align: left; padding-left: 10px; font-weight: 500;">{label}</td>'
                     for y in years_to_fetch:
-                        val = agg_data[y][key]
+                        val = agg_data[y].get(key, 0)
                         row_html += f'<td style="border: 1px solid black; background-color: {color}; padding: 6px;">{val:,.0f}</td>'
                         if has_total:
                             tot = agg_data[y]['total_parts']
-                            row_html += f'<td rowspan="3" style="border: 1px solid black; background-color: #e2f0d9; font-weight: bold; vertical-align: middle; font-size: 14px;">{tot:,.0f}</td>'
+                            # 🛠️ INCREASED ROWSPAN TO 4
+                            row_html += f'<td rowspan="4" style="border: 1px solid black; background-color: #e2f0d9; font-weight: bold; vertical-align: middle; font-size: 14px;">{tot:,.0f}</td>'
                     return row_html + "</tr>"
 
                 html_table += get_row("Spare Parts", "spare", clr_spare, True)
+                html_table += get_row("Local Parts", "local", clr_loc) # 🛠️ ADDED ROW
                 html_table += get_row("ACC & GG", "acc", clr_acc)
                 html_table += get_row("Warranty Spare Parts", "war_spare", clr_war)
                 
@@ -1721,9 +1737,9 @@ elif st.session_state['active_section'] == 'Service':
                 st.markdown(html_table, unsafe_allow_html=True)
 
                 # ==========================================
-                # 📉 6. GAP ANALYSIS TABLE (N2:U6)
+                # 📉 6. GAP ANALYSIS TABLE (N2:U7)
                 # ==========================================
-                if len(raw_data) >= 6:
+                if len(raw_data) >= 7:
                     st.markdown("<br><h3>📉 Overall Gap Analysis</h3>", unsafe_allow_html=True)
                     
                     gap_html = f"""
@@ -1743,7 +1759,7 @@ elif st.session_state['active_section'] == 'Service':
                         
                     gap_html += "</tr></thead><tbody>"
                     
-                    for row in raw_data[2:6]:
+                    for row in raw_data[2:7]:
                         if len(row) < 21:
                             row += [""] * (21 - len(row))
                             
@@ -1759,9 +1775,9 @@ elif st.session_state['active_section'] == 'Service':
                     st.markdown(gap_html, unsafe_allow_html=True)
 
                 # ==========================================
-                # 📈 7. YoY COMPARISON % TABLE (N10:R14)
+                # 📈 7. YoY COMPARISON % TABLE (N11:R16)
                 # ==========================================
-                if len(raw_data) >= 14:
+                if len(raw_data) >= 16:
                     st.markdown("<br><h3>📈 YoY Comparison (%)</h3>", unsafe_allow_html=True)
                     
                     comp_html = f"""
@@ -1771,8 +1787,7 @@ elif st.session_state['active_section'] == 'Service':
                                 <tr>
                     """
                     
-                    # Headers from Row 10 (index 9)
-                    header_row_2 = raw_data[9]
+                    header_row_2 = raw_data[10]
                     if len(header_row_2) < 18:
                         header_row_2 += [""] * (18 - len(header_row_2))
                         
@@ -1781,8 +1796,7 @@ elif st.session_state['active_section'] == 'Service':
                         
                     comp_html += "</tr></thead><tbody>"
                     
-                    # Data Rows from Row 11 to 14 (index 10 to 14)
-                    for row in raw_data[10:14]:
+                    for row in raw_data[11:16]:
                         if len(row) < 18:
                             row += [""] * (18 - len(row))
                             
@@ -1791,13 +1805,12 @@ elif st.session_state['active_section'] == 'Service':
                             align = "left" if i == 0 else "right"
                             fw = "bold" if i == 0 else "normal"
                             
-                            # Smart Color Logic for Percentages
                             text_color = "black"
                             if "%" in str(val):
                                 if "-" in str(val):
-                                    text_color = "#d9534f" # Red for drop
+                                    text_color = "#d9534f"
                                 else:
-                                    text_color = "#28a745" # Green for growth
+                                    text_color = "#28a745"
                                     
                             comp_html += f'<td style="border: 1px solid black; background-color: #ffffff; padding: 6px; text-align: {align}; font-weight: {fw}; color: {text_color};">{val}</td>'
                         comp_html += "</tr>"
