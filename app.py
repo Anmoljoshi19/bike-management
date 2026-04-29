@@ -7,32 +7,55 @@ import calendar
 import json
 import os
 import time
-from datetime import datetime 
 import re
+import base64
 
 # ==========================================
-# 1. MAIN SHEET CONNECTION (WORKSHOP + APPOINTMENT)
+# PAGE SETUP (FULL SCREEN WIDE)
+# ==========================================
+st.set_page_config(page_title="BMW Munich Motorrad Indore", page_icon="🏍️", layout="wide")
+
+def get_base64_image(image_path):
+    if not os.path.exists(image_path):
+        st.error(f"❌ ERROR: Image not found! Ensure it's uploaded to GitHub: {image_path}")
+        return ""
+    try:
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode('utf-8').replace('\n', '')
+    except Exception as e:
+        st.error(f"❌ ERROR: Error reading image: {e}")
+        return ""
+
+# ==========================================
+# GLOBAL CSS & FONT INJECTION
+# ==========================================
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Roboto:wght@300;400;700&display=swap');
+    
+    header { visibility: hidden; }
+    * { font-family: 'Roboto', sans-serif; }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# GOOGLE SHEETS CONNECTION (UPDATED FOR CLOUD)
 # ==========================================
 def connect_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        # MAGIC FIX: Secrets ko dict mein convert kiya taaki error na aaye
+        # Using Streamlit Secrets instead of local creds.json
         creds_dict = dict(st.secrets["gcp_service_account"])
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-
         return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
-
     except Exception as e:
         st.error(f"🔴 Connection Error: {sheet_name} | {e}")
         return None
 
-# ==========================================
-# SERVICE CALLING SHEET
-# ==========================================
 def connect_sheet_by_url(sheet_url, sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
@@ -42,59 +65,188 @@ def connect_sheet_by_url(sheet_url, sheet_name):
 
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-
         return client.open_by_url(sheet_url).worksheet(sheet_name)
-
     except Exception as e:
         st.error(f"🔴 Connection Error: {str(e)}")
         return None
 
-# Page Setup
-st.set_page_config(page_title="Munich Motorrad Local", page_icon="🏍️", layout="wide")
+@st.cache_data(ttl=300)
+def get_cached_sheet_data(url, sheet_name):
+    try:
+        ws = connect_sheet_by_url(url, sheet_name)
+        if ws: return ws.get_all_values()
+        return []
+    except Exception:
+        time.sleep(2)
+        ws = connect_sheet_by_url(url, sheet_name)
+        if ws: return ws.get_all_values()
+        return []
 
 # ==========================================
-# 2. PRO CSS (OFFLINE OPTIMIZED)
+# SESSION NAVIGATION STATE
 # ==========================================
-st.markdown("""
-    <style>
-    .stTabs [data-baseweb="tab-list"] { gap: 15px; background-color: #f0f2f6; padding: 10px; border-radius: 12px; }
-    .stTabs [data-baseweb="tab"] { 
-        height: 55px; background-color: white; border: 2px solid #0056b3 !important; 
-        border-radius: 10px; color: #0056b3; font-weight: bold; padding: 0 25px;
-    }
-    .stTabs [aria-selected="true"] { background-color: #0056b3 !important; color: white !important; }
-    
-    /* Workshop Card Styling */
-    .stExpander { border: 1px solid #ddd !important; border-radius: 12px !important; margin-bottom: 15px !important; }
-    
-    /* Big Update Button */
-    button[key^="up_"] {
-        height: 75px !important; background-color: #0056b3 !important; color: white !important;
-        font-size: 22px !important; font-weight: 900 !important; border-radius: 15px !important;
-    }
-    
-    /* Calendar Grid Scroll Fix */
-    [data-testid="stVerticalBlockBorderWrapper"] > div > div {
-        min-height: 250px !important; max-height: 300px !important; overflow-y: auto !important;
-    }
-    </style>
+if 'active_section' not in st.session_state:
+    st.session_state['active_section'] = 'Landing'
+
+# ==========================================
+# A. LANDING PAGE (BMW MOTORRAD THEME)
+# ==========================================
+if st.session_state['active_section'] == 'Landing':
+
+    # 🔴 RELATIVE PATHS USED HERE - Ensure these files are uploaded to GitHub! 🔴
+    sales_bg = get_base64_image("Showroom.png") 
+    service_bg = get_base64_image("Workshop.png")
+    hero_bg = get_base64_image("GS Image.jpg")
+
+    st.markdown("""
+        <style>
+        .block-container { padding: 0 !important; max-width: 100% !important; overflow-x: hidden; }
+        .stApp { background-color: #f4f4f4; }
+        
+        .bmw-hero {
+            position: relative; width: 100%; height: 70vh;
+            display: flex; align-items: center;
+        }
+        .bmw-hero::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(90deg, rgba(10,10,10,0.9) 0%, rgba(10,10,10,0.3) 100%);
+        }
+        .bmw-content { position: relative; z-index: 2; padding-left: 8%; color: white; }
+        .bmw-slogan { font-family: 'Roboto Condensed', sans-serif; font-size: 16px; letter-spacing: 5px; color: #d6d6d6; margin-bottom: 10px; }
+        .bmw-title { font-family: 'Roboto Condensed', sans-serif; font-size: 70px; font-weight: 900; line-height: 1.1; text-transform: uppercase; margin: 0; }
+        .bmw-subtitle { font-size: 20px; font-weight: 300; margin-top: 15px; color: #0066b1; font-weight: bold; }
+        
+        .module-title { text-align: center; font-family: 'Roboto Condensed', sans-serif; font-size: 32px; font-weight: 900; color: #111; margin: 60px 0 30px 0; text-transform: uppercase; }
+
+        div.stButton > button {
+            height: 450px !important; border-radius: 0 !important; border: none !important; color: white !important;
+            background-color: #111 !important; transition: all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+            display: flex !important; align-items: flex-end !important; justify-content: flex-start !important; padding: 40px !important; width: 100% !important;
+        }
+
+        div.stButton > button:hover { transform: scale(1.02) !important; box-shadow: 0 20px 40px rgba(0,0,0,0.3) !important; }
+        
+        div.stButton > button p {
+            font-family: 'Roboto Condensed', sans-serif !important; font-size: 36px !important; font-weight: 900 !important; 
+            text-transform: uppercase !important; margin: 0 !important; position: relative; z-index: 10;
+        }
+        div.stButton > button:hover p::after { content: ' ❯' !important; color: #0066b1 !important; }
+        </style>
     """, unsafe_allow_html=True)
 
-st.markdown("""
-    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg" width="55">
-        <h1 style="margin: 0; color: #111;">Munich Motorrad Workshop Management</h1>
-    </div>
-""", unsafe_allow_html=True)
+    st.markdown(f"""
+        <style>
+        .bmw-hero {{
+            background: url('data:image/jpeg;base64,{hero_bg}') no-repeat center center !important;
+            background-size: cover !important;
+        }}
+        div[data-testid="column"]:nth-child(2) div.stButton > button,
+        div[data-testid="stColumn"]:nth-child(2) div.stButton > button {{
+            background-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 50%), url('data:image/png;base64,{sales_bg}') !important;
+            background-size: cover !important;
+            background-position: center !important;
+        }}
+        div[data-testid="column"]:nth-child(4) div.stButton > button,
+        div[data-testid="stColumn"]:nth-child(4) div.stButton > button {{
+            background-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 50%), url('data:image/png;base64,{service_bg}') !important;
+            background-size: cover !important;
+            background-position: center !important;
+        }}
+        </style>
+    """, unsafe_allow_html=True)
 
-tab_ws, tab_crm, tab_kpi, tab_parts, tab_parked, tab_rev = st.tabs([
-    "🔧 WORKSHOP MANAGER", 
-    "🤝 CRM",  
-    "📊 KPI DASHBOARD",
-    "📦 PARTS",
-    "🅿️ BIKE PARKED",
-    "💰 REVENUE"
-])
+    st.markdown("""
+        <div class="bmw-hero">
+            <div class="bmw-content">
+                <p class="bmw-slogan">MAKE LIFE A RIDE.</p>
+                <h1 class="bmw-title">MUNICH MOTORRAD<br>INDORE</h1>
+                <p class="bmw-subtitle">INTEGRATED DEALERSHIP PLATFORM</p>
+            </div>
+        </div>
+        
+        <h2 class="module-title">SELECT DEPARTMENT</h2>
+    """, unsafe_allow_html=True)
+
+    _, col1, _, col2, _ = st.columns([1, 4, 0.5, 4, 1])
+
+    with col1:
+        if st.button("SHOWROOM & SALES", key="btn_sales", use_container_width=True):
+            st.session_state['active_section'] = 'Sales'
+            st.rerun()
+
+    with col2:
+        if st.button("WORKSHOP & SERVICE", key="btn_service", use_container_width=True):
+            st.session_state['active_section'] = 'Service'
+            st.rerun()
+            
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+
+# ==========================================
+# B. SALES DEPARTMENT SECTION
+# ==========================================
+elif st.session_state['active_section'] == 'Sales':
+    
+    st.markdown("<style>.block-container { padding: 3rem !important; max-width: 95% !important; margin: 0 auto; }</style>", unsafe_allow_html=True)
+    
+    st.markdown("""
+        <style>
+        .back-btn button { background-color: transparent !important; color: #111 !important; border: 2px solid #111 !important; font-weight: bold !important; height: 45px !important; border-radius: 0px !important; text-transform: uppercase; font-family: 'Roboto Condensed', sans-serif; }
+        .back-btn button:hover { background-color: #111 !important; color: white !important; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="back-btn">', unsafe_allow_html=True)
+    if st.button("❮ BACK TO HOME", key="back_sales"):
+        st.session_state['active_section'] = 'Landing'
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+        
+    st.markdown("<h1 style='font-family: Roboto Condensed, sans-serif; text-transform: uppercase; font-weight: 900;'>Sales Department</h1>", unsafe_allow_html=True)
+    st.info("Yahan apna Sales ka code daal dena...")
+
+# ==========================================
+# C. SERVICE DEPARTMENT SECTION
+# ==========================================
+elif st.session_state['active_section'] == 'Service':
+    
+    st.markdown("<style>.block-container { padding: 3rem !important; max-width: 95% !important; margin: 0 auto; }</style>", unsafe_allow_html=True)
+    
+    st.markdown("""
+        <style>
+        .back-btn button { background-color: transparent !important; color: #111 !important; border: 2px solid #111 !important; font-weight: bold !important; height: 45px !important; border-radius: 0px !important; text-transform: uppercase; font-family: 'Roboto Condensed', sans-serif; }
+        .back-btn button:hover { background-color: #111 !important; color: white !important; }
+        
+        .stTabs [data-baseweb="tab-list"] { gap: 15px; background-color: #f0f2f6; padding: 10px; border-radius: 12px; }
+        .stTabs [data-baseweb="tab"] { height: 55px; background-color: white; border: 2px solid #0056b3 !important; border-radius: 10px; color: #0056b3; font-weight: bold; padding: 0 25px; }
+        .stTabs [aria-selected="true"] { background-color: #0056b3 !important; color: white !important; }
+        .stExpander { border: 1px solid #ddd !important; border-radius: 12px !important; margin-bottom: 15px !important; }
+        
+        button[key^="up_"] { height: 75px !important; background-color: #0056b3 !important; color: white !important; font-size: 22px !important; font-weight: 900 !important; border-radius: 15px !important; }
+        [data-testid="stVerticalBlockBorderWrapper"] > div > div { min-height: 250px !important; max-height: 300px !important; overflow-y: auto !important; }
+        </style>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="back-btn">', unsafe_allow_html=True)
+    if st.button("❮ BACK TO HOME", key="back_service"):
+        st.session_state['active_section'] = 'Landing'
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("""
+        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px; margin-top: 15px;">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg" width="55">
+            <h1 style="margin: 0; color: #111; font-family: 'Roboto Condensed', sans-serif; font-weight: 900; text-transform: uppercase;">Workshop Management</h1>
+        </div>
+    """, unsafe_allow_html=True)
+
+    tab_ws, tab_crm, tab_kpi, tab_parts, tab_parked, tab_rev = st.tabs([
+        "🔧 WORKSHOP MANAGER", 
+        "🤝 CRM",  
+        "📊 KPI DASHBOARD",
+        "📦 PARTS",
+        "🅿️ BIKE PARKED",
+        "💰 REVENUE"
+    ])
 
 # ------------------------------------------
 # TAB 1: WORKSHOP MANAGER
