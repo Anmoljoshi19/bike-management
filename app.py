@@ -15,6 +15,7 @@ import base64
 # ==========================================
 st.set_page_config(page_title="BMW Munich Motorrad Indore", page_icon="🏍️", layout="wide")
 
+@st.cache_data(show_spinner=False)
 def get_base64_image(image_path):
     if not os.path.exists(image_path):
         st.error(f"❌ ERROR: Image not found! Ensure it's uploaded to GitHub: {image_path}")
@@ -41,7 +42,12 @@ st.markdown("""
 # ==========================================
 # GOOGLE SHEETS CONNECTION (UPDATED FOR CLOUD)
 # ==========================================
-def connect_sheet(sheet_name):
+# ==========================================
+# FAST GOOGLE SHEETS CONNECTION (CLOUD + CACHE)
+# ==========================================
+
+@st.cache_resource(show_spinner="Connecting to Database...")
+def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
         # Using Streamlit Secrets instead of local creds.json
@@ -51,24 +57,28 @@ def connect_sheet(sheet_name):
 
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+        return client
     except Exception as e:
-        st.error(f"🔴 Connection Error: {sheet_name} | {e}")
+        st.error(f"🔴 Google Sheets Login Failed: {e}")
         return None
+
+def connect_sheet(sheet_name):
+    client = get_gspread_client()  # Yahan cached connection use ho raha hai
+    if client:
+        try:
+            return client.open("Bike Check-In (Responses)").worksheet(sheet_name)
+        except Exception as e:
+            st.error(f"🔴 Worksheet Error: {sheet_name} | {e}")
+    return None
 
 def connect_sheet_by_url(sheet_url, sheet_name):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    try:
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        if "private_key" in creds_dict:
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
-        return client.open_by_url(sheet_url).worksheet(sheet_name)
-    except Exception as e:
-        st.error(f"🔴 Connection Error: {str(e)}")
-        return None
+    client = get_gspread_client()  # Yahan bhi cached connection use ho raha hai
+    if client:
+        try:
+            return client.open_by_url(sheet_url).worksheet(sheet_name)
+        except Exception as e:
+            st.error(f"🔴 URL Connection Error: {str(e)}")
+    return None
 
 @st.cache_data(ttl=300)
 def get_cached_sheet_data(url, sheet_name):
