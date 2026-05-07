@@ -42,9 +42,6 @@ st.markdown("""
 # ==========================================
 # GOOGLE SHEETS CONNECTION (UPDATED FOR CLOUD)
 # ==========================================
-# ==========================================
-# FAST GOOGLE SHEETS CONNECTION (CLOUD + CACHE)
-# ==========================================
 
 @st.cache_resource(show_spinner="Connecting to Database...")
 def get_gspread_client():
@@ -202,6 +199,34 @@ elif st.session_state['active_section'] == 'Sales':
         <style>
         .back-btn button { background-color: transparent !important; color: #111 !important; border: 2px solid #111 !important; font-weight: bold !important; height: 45px !important; border-radius: 0px !important; text-transform: uppercase; font-family: 'Roboto Condensed', sans-serif; }
         .back-btn button:hover { background-color: #111 !important; color: white !important; }
+        
+        div[data-testid="metric-container"] {
+            background: linear-gradient(135deg, #001f3f 0%, #004080 100%);
+            border: 1px solid #00aaff;
+            border-radius: 10px;
+            padding: 15px 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        div[data-testid="stMetricValue"] > div { color: #00bfff !important; font-size: 32px !important; font-weight: 900 !important; justify-content: center; }
+        div[data-testid="stMetricLabel"] > div { color: #ffffff !important; font-size: 14px !important; font-weight: bold !important; justify-content: center; text-transform: uppercase; }
+
+        .vertical-table {
+            width: 100%; border-collapse: collapse; margin: 10px 0 20px 0;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08); border-radius: 8px; overflow: hidden;
+            font-family: 'Roboto Condensed', sans-serif;
+        }
+        .vertical-table thead tr { background-color: #001f3f; color: #ffffff; text-align: center; }
+        .vertical-table th { padding: 12px 8px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; }
+        .vertical-table td { padding: 10px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; font-size: 15px; font-weight: bold; color: #333; }
+        .vertical-table tbody tr { background-color: #ffffff; }
+        .vertical-table tbody tr:nth-of-type(even) { background-color: #f8f9fa; }
+        .vertical-table tbody tr:hover { background-color: #e6f2ff; }
+        .vertical-table tbody td:first-child { text-align: left; color: #004080; padding-left: 15px; }
+        .vertical-table tbody tr:last-child { background-color: #e6f2ff; border-top: 3px solid #001f3f; }
+        .vertical-table tbody tr:last-child td { font-size: 16px; color: #001f3f; }
+        
+        h4.table-title { color: #004080; text-align: center; font-weight: 900; text-transform: uppercase; margin-bottom: 5px; font-family: 'Roboto Condensed', sans-serif; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -212,7 +237,571 @@ elif st.session_state['active_section'] == 'Sales':
     st.markdown('</div>', unsafe_allow_html=True)
         
     st.markdown("<h1 style='font-family: Roboto Condensed, sans-serif; text-transform: uppercase; font-weight: 900;'>Sales Department</h1>", unsafe_allow_html=True)
-    st.info("Yahan apna Sales ka code daal dena...")
+    
+    tab_leads, tab_other = st.tabs(["📈 WALK IN / IVR", "📈 NSC"])
+    
+    with tab_leads:
+        st.subheader("Walk In / IVR Analytics")
+        
+        sheet_url = "https://docs.google.com/spreadsheets/d/1fQac_iXieFWwvDbI139pQKglc3SqKmVb5f5TTR2Ap1I/edit?gid=739729796#gid=739729796"
+        raw_data = get_cached_sheet_data(sheet_url, "Walk In / IVR")
+        
+        if len(raw_data) > 1:
+            headers = [str(h).strip().upper() for h in raw_data[0]]
+            df = pd.DataFrame(raw_data[1:], columns=headers)
+            
+            if 'DATE' in df.columns:
+                df['MONTH_STR'] = df['DATE'].astype(str).str.strip().str[:2]
+                df['YEAR_STR'] = df['DATE'].astype(str).str.strip().str[-4:]
+                
+                df['YEAR'] = pd.to_numeric(df['YEAR_STR'], errors='coerce')
+                df['MONTH'] = pd.to_numeric(df['MONTH_STR'], errors='coerce')
+                df['QUARTER'] = df['MONTH'].apply(lambda x: (x - 1) // 3 + 1 if pd.notnull(x) else None)
+                df['HALF'] = df['MONTH'].apply(lambda x: 1 if pd.notnull(x) and x <= 6 else (2 if pd.notnull(x) else None))
+            else:
+                st.error("Error: 'DATE' column not found in sheet!")
+                st.stop()
+                
+            if 'SOURCE' in df.columns: df['SOURCE'] = df['SOURCE'].astype(str).str.strip().str.upper()
+            if 'SC' in df.columns: df['SC'] = df['SC'].astype(str).str.strip().str.upper()
+            if 'STATUS' in df.columns: df['STATUS'] = df['STATUS'].astype(str).str.strip().str.upper()
+
+            # 🔴 CURRENT DATE LOGIC 🔴
+            now = datetime.now()
+            curr_month = now.month
+            curr_year = now.year
+
+            st.markdown("### Filters")
+            col_y, col_pt, col_pv, col_sc = st.columns(4)
+            
+            with col_y:
+                selected_year = st.selectbox("Select Year", [2025, 2026], index=1 if curr_year == 2026 else 0)
+            
+            with col_pt:
+                period_type = st.selectbox("Select Period Type", ["Monthly", "Quarterly", "Half-Yearly", "Yearly"])
+                
+            with col_pv:
+                if period_type == "Monthly":
+                    months_dict = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
+                    # 🔴 AUTO SELECT CURRENT MONTH 🔴
+                    selected_period = st.selectbox("Select Month", options=list(months_dict.keys()), index=curr_month-1, format_func=lambda x: months_dict[x])
+                elif period_type == "Quarterly":
+                    selected_period = st.selectbox("Select Quarter", [1, 2, 3, 4], index=(curr_month-1)//3, format_func=lambda x: f"Q{x}")
+                elif period_type == "Half-Yearly":
+                    selected_period = st.selectbox("Select Half", [1, 2], index=0 if curr_month <= 6 else 1, format_func=lambda x: f"H{x} (First Half)" if x==1 else f"H{x} (Second Half)")
+                else: 
+                    selected_period = "All Year"
+                    st.selectbox("Select Period", ["Full Year"], disabled=True)
+                    
+            with col_sc:
+                sc_list = [sc for sc in df['SC'].unique() if sc and sc != 'NAN']
+                selected_sc = st.selectbox("Select Sales Consultant", sc_list)
+
+            st.divider()
+
+            df_year = df[df['YEAR'] == selected_year]
+            
+            if period_type == "Monthly":
+                df_period = df_year[df_year['MONTH'] == selected_period]
+                period_label = "Monthly"
+            elif period_type == "Quarterly":
+                df_period = df_year[df_year['QUARTER'] == selected_period]
+                period_label = "Quarterly"
+            elif period_type == "Half-Yearly":
+                df_period = df_year[df_year['HALF'] == selected_period]
+                period_label = "Half-Yearly"
+            else:
+                df_period = df_year
+                period_label = "Yearly"
+
+            def get_source_count(d_frame, source_type):
+                if 'SOURCE' not in d_frame.columns: return 0
+                if source_type == 'WALK IN': return (d_frame['SOURCE'].str[:7] == 'WALK IN').sum()
+                elif source_type == 'IVR': return (d_frame['SOURCE'].str[:3] == 'IVR').sum()
+                elif source_type == 'REF': return (d_frame['SOURCE'].str[:3] == 'REF').sum()
+                return 0
+                
+            def filter_by_source(d_frame, source_type):
+                if 'SOURCE' not in d_frame.columns: return d_frame
+                if source_type == 'WALK IN': return d_frame[d_frame['SOURCE'].str[:7] == 'WALK IN']
+                elif source_type == 'IVR': return d_frame[d_frame['SOURCE'].str[:3] == 'IVR']
+                return d_frame
+
+            st.markdown(f"### 📈 Source Overview ({selected_year})")
+            
+            st.markdown(f"<h4 style='color:#004080; border-bottom: 2px solid #00bfff; padding-bottom: 5px; margin-top: 20px;'>{period_label} Leads</h4>", unsafe_allow_html=True)
+            m_col1, m_col2, m_col3 = st.columns(3)
+            m_col1.metric("Walk In", get_source_count(df_period, 'WALK IN'))
+            m_col2.metric("IVR", get_source_count(df_period, 'IVR'))
+            m_col3.metric("Ref", get_source_count(df_period, 'REF'))
+            
+            st.markdown(f"<h4 style='color:#004080; border-bottom: 2px solid #00bfff; padding-bottom: 5px; margin-top: 30px;'>Yearly Leads</h4>", unsafe_allow_html=True)
+            y_col1, y_col2, y_col3 = st.columns(3)
+            y_col1.metric("Walk In", get_source_count(df_year, 'WALK IN'))
+            y_col2.metric("IVR", get_source_count(df_year, 'IVR'))
+            y_col3.metric("Ref", get_source_count(df_year, 'REF'))
+
+            st.divider()
+
+            def generate_vertical_status_report(d_period, d_year):
+                statuses = ["NOT INTERESTED", "INTERESTED", "SOLD", "CNR", "BOOKED", "EXISTING ENQ", "DETAILS SENT", "SWITCHOFF", "INVALID NO.", "T/D BOOKED"]
+                
+                period_counts = [(d_period['STATUS'] == s).sum() if 'STATUS' in d_period.columns else 0 for s in statuses]
+                year_counts = [(d_year['STATUS'] == s).sum() if 'STATUS' in d_year.columns else 0 for s in statuses]
+                
+                statuses.append("TOTAL")
+                period_counts.append(sum(period_counts))
+                year_counts.append(sum(year_counts))
+                
+                # 🔴 RENAMED HEADERS TO MONTHLY / YEARLY COUNT 🔴
+                report_df = pd.DataFrame({
+                    "LEAD STATUS": statuses,
+                    "MONTHLY COUNT": period_counts,
+                    "YEARLY COUNT": year_counts
+                })
+                return report_df
+            
+            st.markdown(f"### 🧑‍💼 Selected SC: {selected_sc} (Lead Conversion)")
+            df_period_sc = df_period[df_period['SC'] == selected_sc]
+            df_year_sc = df_year[df_year['SC'] == selected_sc]
+            
+            col_sc_walkin, col_sc_ivr = st.columns(2)
+            
+            with col_sc_walkin:
+                st.markdown("<h4 class='table-title'>🚶 WALK-IN LEADS</h4>", unsafe_allow_html=True)
+                sc_walkin_report = generate_vertical_status_report(filter_by_source(df_period_sc, 'WALK IN'), filter_by_source(df_year_sc, 'WALK IN'))
+                st.markdown(sc_walkin_report.to_html(index=False, classes="vertical-table"), unsafe_allow_html=True)
+                
+            with col_sc_ivr:
+                st.markdown("<h4 class='table-title'>📞 IVR LEADS</h4>", unsafe_allow_html=True)
+                sc_ivr_report = generate_vertical_status_report(filter_by_source(df_period_sc, 'IVR'), filter_by_source(df_year_sc, 'IVR'))
+                st.markdown(sc_ivr_report.to_html(index=False, classes="vertical-table"), unsafe_allow_html=True)
+            
+            st.markdown("<br><hr><br>", unsafe_allow_html=True)
+
+            st.markdown(f"### 🏢 Overall Branch Data ({period_label} & Year {selected_year})")
+            
+            col_all_walkin, col_all_ivr = st.columns(2)
+            
+            with col_all_walkin:
+                st.markdown("<h4 class='table-title'>🚶 WALK-IN LEADS</h4>", unsafe_allow_html=True)
+                cum_walkin_report = generate_vertical_status_report(filter_by_source(df_period, 'WALK IN'), filter_by_source(df_year, 'WALK IN'))
+                st.markdown(cum_walkin_report.to_html(index=False, classes="vertical-table"), unsafe_allow_html=True)
+                
+            with col_all_ivr:
+                st.markdown("<h4 class='table-title'>📞 IVR LEADS</h4>", unsafe_allow_html=True)
+                cum_ivr_report = generate_vertical_status_report(filter_by_source(df_period, 'IVR'), filter_by_source(df_year, 'IVR'))
+                st.markdown(cum_ivr_report.to_html(index=False, classes="vertical-table"), unsafe_allow_html=True)
+
+            # ==========================================
+            # 🔴 1. QUICK STATUS FILTER & RAW DATA (MOVED UP) 🔴
+            # ==========================================
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            st.markdown(f"### 📥 QUICK STATUS FILTER: {selected_sc}")
+
+            if 'STATUS' in df_year_sc.columns:
+                status_counts = df_year_sc['STATUS'].value_counts().to_dict()
+                all_statuses = sorted([str(s) for s in status_counts.keys() if s and str(s) != 'nan'])
+                
+                if 'status_filter_key' not in st.session_state:
+                    st.session_state['status_filter_key'] = "ALL"
+
+                total_leads = len(df_year_sc)
+                
+                cols = st.columns(len(all_statuses) + 1)
+                with cols[0]:
+                    label_all = f"ALL\n({total_leads})"
+                    if st.button(label_all, key="btn_all_raw", use_container_width=True, type="primary" if st.session_state['status_filter_key'] == "ALL" else "secondary"):
+                        st.session_state['status_filter_key'] = "ALL"
+                        st.rerun()
+
+                for i, status in enumerate(all_statuses):
+                    with cols[i+1]:
+                        label = f"{status}\n({status_counts[status]})"
+                        if st.button(label, key=f"btn_raw_{status}", use_container_width=True, type="primary" if st.session_state['status_filter_key'] == status else "secondary"):
+                            st.session_state['status_filter_key'] = status
+                            st.rerun()
+
+                if st.session_state['status_filter_key'] == "ALL":
+                    df_final_list = df_year_sc.copy()
+                else:
+                    df_final_list = df_year_sc[df_year_sc['STATUS'] == st.session_state['status_filter_key']]
+            else:
+                df_final_list = df_year_sc.copy()
+                st.session_state['status_filter_key'] = "ALL"
+
+            st.markdown(f"**Showing Results for:** `{st.session_state['status_filter_key']}`")
+            
+            req_cols = ['DATE', 'MODEL', 'SOURCE', 'CITY', 'NAME', 'EMAIL', 'CONTACT', 'TEST RIDE', 'TEM', 'SC', 'STATUS', 'REMARK 1', 'REMARK 2', 'REMARK 3', 'REMARK 4', 'REMARK 5', 'REMARK 6']
+            actual_cols = [c for c in req_cols if c in df_final_list.columns]
+            df_raw_download = df_final_list[actual_cols].copy()
+            
+            st.dataframe(df_raw_download, use_container_width=True)
+            
+            import io
+            try:
+                buffer_raw = io.BytesIO()
+                with pd.ExcelWriter(buffer_raw, engine='openpyxl') as writer:
+                    df_raw_download.to_excel(writer, index=False, sheet_name='Filtered Data')
+                
+                st.download_button(
+                    label=f"⬇️ DOWNLOAD {st.session_state['status_filter_key']} DATA AS EXCEL",
+                    data=buffer_raw.getvalue(),
+                    file_name=f"BMW_{selected_sc}_{st.session_state['status_filter_key']}_{selected_year}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_raw_btn"
+                )
+            except Exception as e:
+                st.info("Excel download ready - Ensure openpyxl is installed for full functionality.")
+
+
+            # ==========================================
+            # 🔴 2. ADVANCED FOLLOW-UP TRACKER (MOVED DOWN & LINKED) 🔴
+            # ==========================================
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            # Heading me dikhayega ki kis status ka follow up track ho raha he
+            st.markdown(f"### 🗓️ FOLLOW-UP TRACKER: {selected_sc} (Filter: {st.session_state['status_filter_key']})")
+            
+            remark_cols = ['REMARK 1', 'REMARK 2', 'REMARK 3', 'REMARK 4', 'REMARK 5', 'REMARK 6']
+            available_remark_cols = [c for c in remark_cols if c in df_final_list.columns]
+            
+            if available_remark_cols:
+                def count_taken(row):
+                    return sum(1 for col in available_remark_cols if str(row[col]).strip() not in ['', 'nan', 'None', 'NA'])
+
+                # 🔴 YAHAN df_year_sc KI JAGAH df_final_list USE KIYA HAI 🔴
+                # Isse upar wale filter ka asar seedha ispe padega
+                df_followup = df_final_list.copy() 
+                df_followup['FU_TAKEN'] = df_followup.apply(count_taken, axis=1)
+                df_followup['NEXT_DUE'] = df_followup['FU_TAKEN'] + 1
+                
+                df_followup = df_followup[df_followup['FU_TAKEN'] < len(available_remark_cols)]
+                
+                if 'fu_filter' not in st.session_state:
+                    st.session_state['fu_filter'] = "ALL"
+
+                num_buttons = len(available_remark_cols) + 1 
+                f_cols = st.columns(num_buttons)
+                
+                with f_cols[0]:
+                    if st.button(f"ALL PENDING\n({len(df_followup)})", key="fu_all", use_container_width=True, type="primary" if st.session_state['fu_filter'] == "ALL" else "secondary"):
+                        st.session_state['fu_filter'] = "ALL"
+                        st.rerun()
+
+                for i in range(1, num_buttons):
+                    pending_count = len(df_followup[df_followup['NEXT_DUE'] == i])
+                    with f_cols[i]:
+                        label = f"DUE FU {i}\n({pending_count})"
+                        if st.button(label, key=f"fu_{i}", use_container_width=True, type="primary" if st.session_state['fu_filter'] == i else "secondary"):
+                            st.session_state['fu_filter'] = i
+                            st.rerun()
+
+                if st.session_state['fu_filter'] == "ALL":
+                    df_final_display = df_followup.copy()
+                else:
+                    df_final_display = df_followup[df_followup['NEXT_DUE'] == st.session_state['fu_filter']]
+
+                st.info(f"Showing **{st.session_state['status_filter_key']}** Leads where **Follow-up {st.session_state['fu_filter']}** is Pending")
+                
+                display_cols = ['DATE', 'NAME', 'CONTACT', 'MODEL', 'STATUS', 'FU_TAKEN'] + available_remark_cols
+                actual_display = [c for c in display_cols if c in df_final_display.columns]
+                
+                styled_df = df_final_display[actual_display].style.map(
+                    lambda x: 'background-color: #ffcccc; color: #900;' if x == 0 else '', subset=['FU_TAKEN']
+                )
+                
+                st.dataframe(styled_df, use_container_width=True)
+
+                try:
+                    buffer_fu = io.BytesIO()
+                    with pd.ExcelWriter(buffer_fu, engine='openpyxl') as writer:
+                        df_final_display[actual_display].to_excel(writer, index=False, sheet_name='Pending Followups')
+                    
+                    st.download_button(
+                        label=f"⬇️ DOWNLOAD PENDING FU {st.session_state['fu_filter']} AS EXCEL",
+                        data=buffer_fu.getvalue(),
+                        file_name=f"BMW_Pending_FU_{st.session_state['fu_filter']}_{selected_sc}_{st.session_state['status_filter_key']}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_fu_btn"
+                    )
+                except Exception as e:
+                    st.caption("Excel export ready (Requires 'openpyxl' module).")
+            else:
+                st.info("Follow-up analysis ke liye 'REMARK 1' se 'REMARK 6' columns sheet me hona zaroori hai.")
+
+
+    with tab_other:
+        st.subheader("NSC Analytics")
+        
+        sheet_url = "https://docs.google.com/spreadsheets/d/1fQac_iXieFWwvDbI139pQKglc3SqKmVb5f5TTR2Ap1I/edit?gid=739729796#gid=739729796"
+        raw_data_nsc = get_cached_sheet_data(sheet_url, "NSC")
+        
+        if len(raw_data_nsc) > 1:
+            headers_nsc = [str(h).strip().upper() for h in raw_data_nsc[0]]
+            df_nsc = pd.DataFrame(raw_data_nsc[1:], columns=headers_nsc)
+            
+            # Date Parsing
+            if 'DATE' in df_nsc.columns:
+                df_nsc['MONTH_STR'] = df_nsc['DATE'].astype(str).str.strip().str[:2]
+                df_nsc['YEAR_STR'] = df_nsc['DATE'].astype(str).str.strip().str[-4:]
+                
+                df_nsc['YEAR'] = pd.to_numeric(df_nsc['YEAR_STR'], errors='coerce')
+                df_nsc['MONTH'] = pd.to_numeric(df_nsc['MONTH_STR'], errors='coerce')
+                df_nsc['QUARTER'] = df_nsc['MONTH'].apply(lambda x: (x - 1) // 3 + 1 if pd.notnull(x) else None)
+                df_nsc['HALF'] = df_nsc['MONTH'].apply(lambda x: 1 if pd.notnull(x) and x <= 6 else (2 if pd.notnull(x) else None))
+            else:
+                st.error("Error: 'DATE' column not found in NSC sheet!")
+                st.stop()
+                
+            # Clean categories
+            for col in ['SOURCE', 'SC', 'STATUS']:
+                if col in df.columns: 
+                    df[col] = df[col].astype(str).str.strip().str.upper()
+            
+            # 🔴 SPELLING MISTAKE FIXER 🔴
+            if 'STATUS' in df.columns:
+                df['STATUS'] = df['STATUS'].replace({
+                    'INTRESTED': 'INTERESTED',
+                    'NOT INTRESTED': 'NOT INTERESTED',
+                    'NOT  INTERESTED': 'NOT INTERESTED', # Agar galti se double space ho
+                    'SWITHOFF': 'SWITCHOFF' # Aage ke liye precaution
+                })
+
+            # Filters variables
+            now = datetime.now()
+            curr_month = now.month
+            curr_year = now.year
+
+            st.markdown("### Filters (NSC)")
+            col_y_nsc, col_pt_nsc, col_pv_nsc, col_sc_nsc = st.columns(4)
+            
+            with col_y_nsc:
+                selected_year_nsc = st.selectbox("Select Year", [2025, 2026], index=1 if curr_year == 2026 else 0, key="y_nsc")
+            
+            with col_pt_nsc:
+                period_type_nsc = st.selectbox("Select Period Type", ["Monthly", "Quarterly", "Half-Yearly", "Yearly"], key="pt_nsc")
+                
+            with col_pv_nsc:
+                if period_type_nsc == "Monthly":
+                    months_dict = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
+                    selected_period_nsc = st.selectbox("Select Month", options=list(months_dict.keys()), index=curr_month-1, format_func=lambda x: months_dict[x], key="pv_nsc")
+                elif period_type_nsc == "Quarterly":
+                    selected_period_nsc = st.selectbox("Select Quarter", [1, 2, 3, 4], index=(curr_month-1)//3, format_func=lambda x: f"Q{x}", key="pv_nsc")
+                elif period_type_nsc == "Half-Yearly":
+                    selected_period_nsc = st.selectbox("Select Half", [1, 2], index=0 if curr_month <= 6 else 1, format_func=lambda x: f"H{x} (First Half)" if x==1 else f"H{x} (Second Half)", key="pv_nsc")
+                else: 
+                    selected_period_nsc = "All Year"
+                    st.selectbox("Select Period", ["Full Year"], disabled=True, key="pv_nsc")
+                    
+            with col_sc_nsc:
+                sc_list_nsc = sorted([sc for sc in df_nsc['SC'].unique() if sc and sc != 'NAN'])
+                selected_sc_nsc = st.selectbox("Select Sales Consultant", sc_list_nsc, key="sc_nsc")
+
+            st.divider()
+
+            # Filter Data
+            df_year_nsc = df_nsc[df_nsc['YEAR'] == selected_year_nsc]
+            
+            if period_type_nsc == "Monthly":
+                df_period_nsc = df_year_nsc[df_year_nsc['MONTH'] == selected_period_nsc]
+                period_label_nsc = "Monthly"
+            elif period_type_nsc == "Quarterly":
+                df_period_nsc = df_year_nsc[df_year_nsc['QUARTER'] == selected_period_nsc]
+                period_label_nsc = "Quarterly"
+            elif period_type_nsc == "Half-Yearly":
+                df_period_nsc = df_year_nsc[df_year_nsc['HALF'] == selected_period_nsc]
+                period_label_nsc = "Half-Yearly"
+            else:
+                df_period_nsc = df_year_nsc
+                period_label_nsc = "Yearly"
+
+            # 📈 Tiles for NSC (Total, Interested, Sold as default NSC metrics)
+            def get_status_count(d_frame, s_type):
+                if 'STATUS' not in d_frame.columns: return 0
+                if s_type == 'TOTAL': return len(d_frame)
+                return (d_frame['STATUS'] == s_type).sum()
+
+            st.markdown(f"### 📈 NSC Overview ({selected_year_nsc})")
+            
+            st.markdown(f"<h4 style='color:#004080; border-bottom: 2px solid #00bfff; padding-bottom: 5px; margin-top: 20px;'>{period_label_nsc} NSC Leads</h4>", unsafe_allow_html=True)
+            m_col1, m_col2, m_col3 = st.columns(3)
+            m_col1.metric("Total Leads", get_status_count(df_period_nsc, 'TOTAL'))
+            m_col2.metric("Interested", get_status_count(df_period_nsc, 'INTERESTED'))
+            m_col3.metric("Sold", get_status_count(df_period_nsc, 'SOLD'))
+            
+            st.markdown(f"<h4 style='color:#004080; border-bottom: 2px solid #00bfff; padding-bottom: 5px; margin-top: 30px;'>Yearly NSC Leads</h4>", unsafe_allow_html=True)
+            y_col1, y_col2, y_col3 = st.columns(3)
+            y_col1.metric("Total Leads", get_status_count(df_year_nsc, 'TOTAL'))
+            y_col2.metric("Interested", get_status_count(df_year_nsc, 'INTERESTED'))
+            y_col3.metric("Sold", get_status_count(df_year_nsc, 'SOLD'))
+
+            st.divider()
+
+            # 🔴 VERTICAL TABLE
+            def generate_vertical_status_report_nsc(d_period, d_year):
+                statuses = ["NOT INTERESTED", "INTERESTED", "SOLD", "CNR", "BOOKED", "EXISTING ENQ", "DETAILS SENT", "SWITCHOFF", "INVALID NO.", "T/D BOOKED"]
+                p_counts = [(d_period['STATUS'] == s).sum() if 'STATUS' in d_period.columns else 0 for s in statuses]
+                y_counts = [(d_year['STATUS'] == s).sum() if 'STATUS' in d_year.columns else 0 for s in statuses]
+                
+                statuses.append("TOTAL")
+                p_counts.append(sum(p_counts))
+                y_counts.append(sum(y_counts))
+                
+                return pd.DataFrame({
+                    "LEAD STATUS": statuses,
+                    "MONTHLY COUNT": p_counts,
+                    "YEARLY COUNT": y_counts
+                })
+
+            df_period_sc_nsc = df_period_nsc[df_period_nsc['SC'] == selected_sc_nsc]
+            df_year_sc_nsc = df_year_nsc[df_year_nsc['SC'] == selected_sc_nsc]
+            
+            col_sc_nsc, col_all_nsc = st.columns(2)
+            
+            with col_sc_nsc:
+                st.markdown(f"<h4 class='table-title'>🧑‍💼 {selected_sc_nsc} (NSC)</h4>", unsafe_allow_html=True)
+                st.markdown(generate_vertical_status_report_nsc(df_period_sc_nsc, df_year_sc_nsc).to_html(index=False, classes="vertical-table"), unsafe_allow_html=True)
+                
+            with col_all_nsc:
+                st.markdown("<h4 class='table-title'>🏢 OVERALL BRANCH (NSC)</h4>", unsafe_allow_html=True)
+                st.markdown(generate_vertical_status_report_nsc(df_period_nsc, df_year_nsc).to_html(index=False, classes="vertical-table"), unsafe_allow_html=True)
+
+            # ==========================================
+            # 🔴 1. QUICK STATUS FILTER & RAW DATA (NSC) 🔴
+            # ==========================================
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            st.markdown(f"### 📥 QUICK STATUS FILTER: {selected_sc_nsc} (NSC)")
+
+            if 'STATUS' in df_year_sc_nsc.columns:
+                status_counts_nsc = df_year_sc_nsc['STATUS'].value_counts().to_dict()
+                all_statuses_nsc = sorted([str(s) for s in status_counts_nsc.keys() if s and str(s) != 'nan'])
+                
+                if 'status_filter_key_nsc' not in st.session_state:
+                    st.session_state['status_filter_key_nsc'] = "ALL"
+
+                total_leads_nsc = len(df_year_sc_nsc)
+                
+                cols_nsc = st.columns(len(all_statuses_nsc) + 1)
+                with cols_nsc[0]:
+                    label_all_nsc = f"ALL\n({total_leads_nsc})"
+                    if st.button(label_all_nsc, key="btn_all_raw_nsc", use_container_width=True, type="primary" if st.session_state['status_filter_key_nsc'] == "ALL" else "secondary"):
+                        st.session_state['status_filter_key_nsc'] = "ALL"
+                        st.rerun()
+
+                for i, status in enumerate(all_statuses_nsc):
+                    with cols_nsc[i+1]:
+                        label = f"{status}\n({status_counts_nsc[status]})"
+                        if st.button(label, key=f"btn_raw_nsc_{status}", use_container_width=True, type="primary" if st.session_state['status_filter_key_nsc'] == status else "secondary"):
+                            st.session_state['status_filter_key_nsc'] = status
+                            st.rerun()
+
+                if st.session_state['status_filter_key_nsc'] == "ALL":
+                    df_final_list_nsc = df_year_sc_nsc.copy()
+                else:
+                    df_final_list_nsc = df_year_sc_nsc[df_year_sc_nsc['STATUS'] == st.session_state['status_filter_key_nsc']]
+            else:
+                df_final_list_nsc = df_year_sc_nsc.copy()
+                st.session_state['status_filter_key_nsc'] = "ALL"
+
+            st.markdown(f"**Showing Results for:** `{st.session_state['status_filter_key_nsc']}`")
+            
+            # NSC might have up to REMARK 7 (K to Q is 7 columns)
+            req_cols_nsc = ['DATE', 'MODEL', 'SOURCE', 'CITY', 'NAME', 'EMAIL', 'CONTACT', 'TEST RIDE', 'TEM', 'SC', 'STATUS', 'REMARK 1', 'REMARK 2', 'REMARK 3', 'REMARK 4', 'REMARK 5', 'REMARK 6', 'REMARK 7']
+            actual_cols_nsc = [c for c in req_cols_nsc if c in df_final_list_nsc.columns]
+            df_raw_download_nsc = df_final_list_nsc[actual_cols_nsc].copy()
+            
+            st.dataframe(df_raw_download_nsc, use_container_width=True)
+            
+            import io
+            try:
+                buffer_raw_nsc = io.BytesIO()
+                with pd.ExcelWriter(buffer_raw_nsc, engine='openpyxl') as writer:
+                    df_raw_download_nsc.to_excel(writer, index=False, sheet_name='Filtered NSC Data')
+                
+                st.download_button(
+                    label=f"⬇️ DOWNLOAD {st.session_state['status_filter_key_nsc']} DATA AS EXCEL",
+                    data=buffer_raw_nsc.getvalue(),
+                    file_name=f"BMW_NSC_{selected_sc_nsc}_{st.session_state['status_filter_key_nsc']}_{selected_year_nsc}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_raw_btn_nsc"
+                )
+            except Exception as e:
+                st.info("Excel download ready - Ensure openpyxl is installed for full functionality.")
+
+
+            # ==========================================
+            # 🔴 2. ADVANCED FOLLOW-UP TRACKER (NSC) 🔴
+            # ==========================================
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            st.markdown(f"### 🗓️ FOLLOW-UP TRACKER: {selected_sc_nsc} (Filter: {st.session_state['status_filter_key_nsc']})")
+            
+            # Columns K to Q usually mean Remark 1 to 7
+            remark_cols_nsc = ['REMARK 1', 'REMARK 2', 'REMARK 3', 'REMARK 4', 'REMARK 5', 'REMARK 6', 'REMARK 7']
+            available_remark_cols_nsc = [c for c in remark_cols_nsc if c in df_final_list_nsc.columns]
+            
+            if available_remark_cols_nsc:
+                def count_taken_nsc(row):
+                    return sum(1 for col in available_remark_cols_nsc if str(row[col]).strip() not in ['', 'nan', 'None', 'NA'])
+
+                df_followup_nsc = df_final_list_nsc.copy() 
+                df_followup_nsc['FU_TAKEN'] = df_followup_nsc.apply(count_taken_nsc, axis=1)
+                df_followup_nsc['NEXT_DUE'] = df_followup_nsc['FU_TAKEN'] + 1
+                
+                df_followup_nsc = df_followup_nsc[df_followup_nsc['FU_TAKEN'] < len(available_remark_cols_nsc)]
+                
+                if 'fu_filter_nsc' not in st.session_state:
+                    st.session_state['fu_filter_nsc'] = "ALL"
+
+                num_buttons_nsc = len(available_remark_cols_nsc) + 1 
+                f_cols_nsc = st.columns(num_buttons_nsc)
+                
+                with f_cols_nsc[0]:
+                    if st.button(f"ALL PENDING\n({len(df_followup_nsc)})", key="fu_all_nsc", use_container_width=True, type="primary" if st.session_state['fu_filter_nsc'] == "ALL" else "secondary"):
+                        st.session_state['fu_filter_nsc'] = "ALL"
+                        st.rerun()
+
+                for i in range(1, num_buttons_nsc):
+                    pending_count_nsc = len(df_followup_nsc[df_followup_nsc['NEXT_DUE'] == i])
+                    with f_cols_nsc[i]:
+                        label = f"DUE FU {i}\n({pending_count_nsc})"
+                        if st.button(label, key=f"fu_nsc_{i}", use_container_width=True, type="primary" if st.session_state['fu_filter_nsc'] == i else "secondary"):
+                            st.session_state['fu_filter_nsc'] = i
+                            st.rerun()
+
+                if st.session_state['fu_filter_nsc'] == "ALL":
+                    df_final_display_nsc = df_followup_nsc.copy()
+                else:
+                    df_final_display_nsc = df_followup_nsc[df_followup_nsc['NEXT_DUE'] == st.session_state['fu_filter_nsc']]
+
+                st.info(f"Showing **{st.session_state['status_filter_key_nsc']}** Leads where **Follow-up {st.session_state['fu_filter_nsc']}** is Pending")
+                
+                display_cols_nsc = ['DATE', 'NAME', 'CONTACT', 'MODEL', 'STATUS', 'FU_TAKEN'] + available_remark_cols_nsc
+                actual_display_nsc = [c for c in display_cols_nsc if c in df_final_display_nsc.columns]
+                
+                styled_df_nsc = df_final_display_nsc[actual_display_nsc].style.map(
+                    lambda x: 'background-color: #ffcccc; color: #900;' if x == 0 else '', subset=['FU_TAKEN']
+                )
+                
+                st.dataframe(styled_df_nsc, use_container_width=True)
+
+                try:
+                    buffer_fu_nsc = io.BytesIO()
+                    with pd.ExcelWriter(buffer_fu_nsc, engine='openpyxl') as writer:
+                        df_final_display_nsc[actual_display_nsc].to_excel(writer, index=False, sheet_name='Pending NSC Followups')
+                    
+                    st.download_button(
+                        label=f"⬇️ DOWNLOAD PENDING FU {st.session_state['fu_filter_nsc']} AS EXCEL",
+                        data=buffer_fu_nsc.getvalue(),
+                        file_name=f"BMW_NSC_Pending_FU_{st.session_state['fu_filter_nsc']}_{selected_sc_nsc}_{st.session_state['status_filter_key_nsc']}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_fu_btn_nsc"
+                    )
+                except Exception as e:
+                    st.caption("Excel export ready (Requires 'openpyxl' module).")
+            else:
+                st.info("Follow-up analysis ke liye 'REMARK 1' se aage ke columns sheet me hona zaroori hai.")
+        else:
+            st.warning("NSC Sheet me data nahi mila.")
 
 # ==========================================
 # C. SERVICE DEPARTMENT SECTION
