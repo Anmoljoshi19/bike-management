@@ -238,7 +238,7 @@ elif st.session_state['active_section'] == 'Sales':
         
     st.markdown("<h1 style='font-family: Roboto Condensed, sans-serif; text-transform: uppercase; font-weight: 900;'>Sales Department</h1>", unsafe_allow_html=True)
     
-    tab_leads, tab_other = st.tabs(["📈 WALK IN / IVR", "📈 NSC"])
+    tab_walkin_ivr, tab_nsc, tab_sp = st.tabs(["📈 WALK IN / IVR", "📈 NSC", "📈 SOCIAL POTATO" ])
     
     with tab_leads:
         st.subheader("Walk In / IVR Analytics")
@@ -530,7 +530,7 @@ elif st.session_state['active_section'] == 'Sales':
                 st.info("Follow-up analysis ke liye 'REMARK 1' se 'REMARK 6' columns sheet me hona zaroori hai.")
 
 
-    with tab_other:
+    with tab_nsc:
         st.subheader("NSC Analytics")
         
         sheet_url = "https://docs.google.com/spreadsheets/d/1fQac_iXieFWwvDbI139pQKglc3SqKmVb5f5TTR2Ap1I/edit?gid=739729796#gid=739729796"
@@ -802,6 +802,307 @@ elif st.session_state['active_section'] == 'Sales':
                 st.info("Follow-up analysis ke liye 'REMARK 1' se aage ke columns sheet me hona zaroori hai.")
         else:
             st.warning("NSC Sheet me data nahi mila.")
+
+with tab_sp:
+        st.subheader("Social Potato Analytics")
+        
+        sheet_url_sp = "https://docs.google.com/spreadsheets/d/1fQac_iXieFWwvDbI139pQKglc3SqKmVb5f5TTR2Ap1I/edit?gid=1618144995#gid=1618144995"
+        raw_data_sp = get_cached_sheet_data(sheet_url_sp, "Social Patato")
+        
+        if len(raw_data_sp) > 1:
+            headers_sp = [str(h).strip().upper() for h in raw_data_sp[0]]
+            df_sp = pd.DataFrame(raw_data_sp[1:], columns=headers_sp)
+            
+            # Date Parsing (A:A)
+            if 'DATE' in df_sp.columns:
+                df_sp['MONTH_STR'] = df_sp['DATE'].astype(str).str.strip().str[:2]
+                df_sp['YEAR_STR'] = df_sp['DATE'].astype(str).str.strip().str[-4:]
+                
+                df_sp['YEAR'] = pd.to_numeric(df_sp['YEAR_STR'], errors='coerce')
+                df_sp['MONTH'] = pd.to_numeric(df_sp['MONTH_STR'], errors='coerce')
+                df_sp['QUARTER'] = df_sp['MONTH'].apply(lambda x: (x - 1) // 3 + 1 if pd.notnull(x) else None)
+                df_sp['HALF'] = df_sp['MONTH'].apply(lambda x: 1 if pd.notnull(x) and x <= 6 else (2 if pd.notnull(x) else None))
+            else:
+                st.error("Error: 'DATE' column not found in Social Potato sheet!")
+                st.stop()
+                
+            # Clean categories (H:H is SC, I:I is Status)
+            for col in ['SOURCE', 'SC', 'STATUS']:
+                if col in df_sp.columns: 
+                    df_sp[col] = df_sp[col].astype(str).str.strip().str.upper()
+            
+            # 🔴 SPELLING MISTAKE FIXER 🔴
+            if 'STATUS' in df_sp.columns:
+                df_sp['STATUS'] = df_sp['STATUS'].replace({
+                    'INTRESTED': 'INTERESTED',
+                    'NOT INTRESTED': 'NOT INTERESTED',
+                    'NOT  INTERESTED': 'NOT INTERESTED', # Agar galti se double space ho
+                    'SWITHOFF': 'SWITCHOFF' # Aage ke liye precaution
+                })
+
+            # Filters variables
+            now = datetime.now()
+            curr_month = now.month
+            curr_year = now.year
+
+            st.markdown("### Filters (Social Potato)")
+            col_y_sp, col_pt_sp, col_pv_sp, col_sc_sp = st.columns(4)
+            
+            with col_y_sp:
+                selected_year_sp = st.selectbox("Select Year", [2025, 2026], index=1 if curr_year == 2026 else 0, key="y_sp")
+            
+            with col_pt_sp:
+                period_type_sp = st.selectbox("Select Period Type", ["Monthly", "Quarterly", "Half-Yearly", "Yearly"], key="pt_sp")
+                
+            with col_pv_sp:
+                if period_type_sp == "Monthly":
+                    months_dict = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
+                    selected_period_sp = st.selectbox("Select Month", options=list(months_dict.keys()), index=curr_month-1, format_func=lambda x: months_dict[x], key="pv_sp")
+                elif period_type_sp == "Quarterly":
+                    selected_period_sp = st.selectbox("Select Quarter", [1, 2, 3, 4], index=(curr_month-1)//3, format_func=lambda x: f"Q{x}", key="pv_sp")
+                elif period_type_sp == "Half-Yearly":
+                    selected_period_sp = st.selectbox("Select Half", [1, 2], index=0 if curr_month <= 6 else 1, format_func=lambda x: f"H{x} (First Half)" if x==1 else f"H{x} (Second Half)", key="pv_sp")
+                else: 
+                    selected_period_sp = "All Year"
+                    st.selectbox("Select Period", ["Full Year"], disabled=True, key="pv_sp_disabled")
+                    
+            with col_sc_sp:
+                if 'SC' in df_sp.columns:
+                    sc_list_sp = sorted([sc for sc in df_sp['SC'].unique() if sc and str(sc).upper() != 'NAN'])
+                else:
+                    sc_list_sp = ["ALL"]
+                selected_sc_sp = st.selectbox("Select Sales Consultant", sc_list_sp, key="sc_sp")
+
+            st.divider()
+
+            # Filter Data
+            df_year_sp = df_sp[df_sp['YEAR'] == selected_year_sp]
+            
+            if period_type_sp == "Monthly":
+                df_period_sp = df_year_sp[df_year_sp['MONTH'] == selected_period_sp]
+                period_label_sp = "Monthly"
+            elif period_type_sp == "Quarterly":
+                df_period_sp = df_year_sp[df_year_sp['QUARTER'] == selected_period_sp]
+                period_label_sp = "Quarterly"
+            elif period_type_sp == "Half-Yearly":
+                df_period_sp = df_year_sp[df_year_sp['HALF'] == selected_period_sp]
+                period_label_sp = "Half-Yearly"
+            else:
+                df_period_sp = df_year_sp
+                period_label_sp = "Yearly"
+
+            # 📈 Tiles for Social Potato
+            def get_status_count_sp(d_frame, s_type):
+                if 'STATUS' not in d_frame.columns: return 0
+                if s_type == 'TOTAL': return len(d_frame)
+                return (d_frame['STATUS'] == s_type).sum()
+
+            st.markdown(f"### 📈 Social Potato Overview ({selected_year_sp})")
+            
+            st.markdown(f"<h4 style='color:#004080; border-bottom: 2px solid #00bfff; padding-bottom: 5px; margin-top: 20px;'>{period_label_sp} Leads</h4>", unsafe_allow_html=True)
+            m_col1_sp, m_col2_sp, m_col3_sp = st.columns(3)
+            m_col1_sp.metric("Total Leads", get_status_count_sp(df_period_sp, 'TOTAL'))
+            m_col2_sp.metric("Interested", get_status_count_sp(df_period_sp, 'INTERESTED'))
+            m_col3_sp.metric("Sold", get_status_count_sp(df_period_sp, 'SOLD'))
+            
+            st.markdown(f"<h4 style='color:#004080; border-bottom: 2px solid #00bfff; padding-bottom: 5px; margin-top: 30px;'>Yearly Leads</h4>", unsafe_allow_html=True)
+            y_col1_sp, y_col2_sp, y_col3_sp = st.columns(3)
+            y_col1_sp.metric("Total Leads", get_status_count_sp(df_year_sp, 'TOTAL'))
+            y_col2_sp.metric("Interested", get_status_count_sp(df_year_sp, 'INTERESTED'))
+            y_col3_sp.metric("Sold", get_status_count_sp(df_year_sp, 'SOLD'))
+
+            st.divider()
+
+            # 🔴 VERTICAL TABLE
+            # 🔴 VERTICAL TABLE (DYNAMIC STATUS)
+            def generate_vertical_status_report_sp(d_period, d_year):
+                if 'STATUS' not in d_year.columns:
+                    return pd.DataFrame({"LEAD STATUS": ["TOTAL"], "PERIOD COUNT": [len(d_period)], "YEARLY COUNT": [len(d_year)]})
+
+                # Blank ya NaN values ko "BLANK" me convert kar do taaki unka bhi count mile
+                d_period_status = d_period['STATUS'].fillna("BLANK").replace(["", "NAN", "NONE", "nan"], "BLANK")
+                d_year_status = d_year['STATUS'].fillna("BLANK").replace(["", "NAN", "NONE", "nan"], "BLANK")
+
+                # Yearly data se saare unique status nikal lo (Kyunki yearly me sab cover ho jayega)
+                unique_statuses = d_year_status.unique().tolist()
+                
+                # Alphabetical order me sort kar do achhe look ke liye
+                unique_statuses = [str(s) for s in unique_statuses]
+                unique_statuses.sort()
+
+                p_counts = []
+                y_counts = []
+
+                # Har unique status ka count nikalo
+                for s in unique_statuses:
+                    p_counts.append((d_period_status == s).sum())
+                    y_counts.append((d_year_status == s).sum())
+                
+                # Aakhiri me Total add karo
+                unique_statuses.append("TOTAL")
+                p_counts.append(len(d_period)) # Exact rows in period
+                y_counts.append(len(d_year))   # Exact rows in year
+                
+                return pd.DataFrame({
+                    "LEAD STATUS": unique_statuses,
+                    f"{period_label_sp.upper()} COUNT": p_counts, # Dynamic column name (Monthly/Quarterly etc)
+                    "YEARLY COUNT": y_counts
+                })
+
+            if 'SC' in df_period_sp.columns:
+                df_period_sc_sp = df_period_sp[df_period_sp['SC'] == selected_sc_sp]
+                df_year_sc_sp = df_year_sp[df_year_sp['SC'] == selected_sc_sp]
+            else:
+                df_period_sc_sp = df_period_sp
+                df_year_sc_sp = df_year_sp
+            
+            col_sc_table_sp, col_all_table_sp = st.columns(2)
+            
+            with col_sc_table_sp:
+                st.markdown(f"<h4 class='table-title'>🧑‍💼 {selected_sc_sp} (Social Potato)</h4>", unsafe_allow_html=True)
+                st.markdown(generate_vertical_status_report_sp(df_period_sc_sp, df_year_sc_sp).to_html(index=False, classes="vertical-table"), unsafe_allow_html=True)
+                
+            with col_all_table_sp:
+                st.markdown("<h4 class='table-title'>🏢 OVERALL BRANCH (Social Potato)</h4>", unsafe_allow_html=True)
+                st.markdown(generate_vertical_status_report_sp(df_period_sp, df_year_sp).to_html(index=False, classes="vertical-table"), unsafe_allow_html=True)
+
+            # ==========================================
+            # 🔴 1. QUICK STATUS FILTER & RAW DATA (Social Potato) 🔴
+            # ==========================================
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            st.markdown(f"### 📥 QUICK STATUS FILTER: {selected_sc_sp} (Social Potato)")
+
+            if 'STATUS' in df_year_sc_sp.columns:
+                status_counts_sp = df_year_sc_sp['STATUS'].value_counts().to_dict()
+                all_statuses_sp = sorted([str(s) for s in status_counts_sp.keys() if s and str(s) != 'nan'])
+                
+                if 'status_filter_key_sp' not in st.session_state:
+                    st.session_state['status_filter_key_sp'] = "ALL"
+
+                total_leads_sp = len(df_year_sc_sp)
+                
+                cols_sp = st.columns(len(all_statuses_sp) + 1)
+                with cols_sp[0]:
+                    label_all_sp = f"ALL\n({total_leads_sp})"
+                    if st.button(label_all_sp, key="btn_all_raw_sp", use_container_width=True, type="primary" if st.session_state['status_filter_key_sp'] == "ALL" else "secondary"):
+                        st.session_state['status_filter_key_sp'] = "ALL"
+                        st.rerun()
+
+                for i, status in enumerate(all_statuses_sp):
+                    with cols_sp[i+1]:
+                        label = f"{status}\n({status_counts_sp[status]})"
+                        if st.button(label, key=f"btn_raw_sp_{status}", use_container_width=True, type="primary" if st.session_state['status_filter_key_sp'] == status else "secondary"):
+                            st.session_state['status_filter_key_sp'] = status
+                            st.rerun()
+
+                if st.session_state['status_filter_key_sp'] == "ALL":
+                    df_final_list_sp = df_year_sc_sp.copy()
+                else:
+                    df_final_list_sp = df_year_sc_sp[df_year_sc_sp['STATUS'] == st.session_state['status_filter_key_sp']]
+            else:
+                df_final_list_sp = df_year_sc_sp.copy()
+                st.session_state['status_filter_key_sp'] = "ALL"
+
+            st.markdown(f"**Showing Results for:** `{st.session_state['status_filter_key_sp']}`")
+            
+            # Social Potato has Remarks from J to Q (8 columns)
+            req_cols_sp = ['DATE', 'MODEL', 'SOURCE', 'CITY', 'NAME', 'EMAIL', 'CONTACT', 'TEST RIDE', 'TEM', 'SC', 'STATUS', 'REMARK 1', 'REMARK 2', 'REMARK 3', 'REMARK 4', 'REMARK 5', 'REMARK 6', 'REMARK 7', 'REMARK 8']
+            actual_cols_sp = [c for c in req_cols_sp if c in df_final_list_sp.columns]
+            df_raw_download_sp = df_final_list_sp[actual_cols_sp].copy()
+            
+            st.dataframe(df_raw_download_sp, use_container_width=True)
+            
+            import io
+            try:
+                buffer_raw_sp = io.BytesIO()
+                with pd.ExcelWriter(buffer_raw_sp, engine='openpyxl') as writer:
+                    df_raw_download_sp.to_excel(writer, index=False, sheet_name='Filtered Data')
+                
+                st.download_button(
+                    label=f"⬇️ DOWNLOAD {st.session_state['status_filter_key_sp']} DATA AS EXCEL",
+                    data=buffer_raw_sp.getvalue(),
+                    file_name=f"Social_Potato_{selected_sc_sp}_{st.session_state['status_filter_key_sp']}_{selected_year_sp}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_raw_btn_sp"
+                )
+            except Exception as e:
+                st.info("Excel download ready - Ensure openpyxl is installed for full functionality.")
+
+
+            # ==========================================
+            # 🔴 2. ADVANCED FOLLOW-UP TRACKER (Social Potato) 🔴
+            # ==========================================
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            st.markdown(f"### 🗓️ FOLLOW-UP TRACKER: {selected_sc_sp} (Filter: {st.session_state['status_filter_key_sp']})")
+            
+            # Columns J to Q (8 columns for Remarks)
+            remark_cols_sp = ['REMARK 1', 'REMARK 2', 'REMARK 3', 'REMARK 4', 'REMARK 5', 'REMARK 6', 'REMARK 7', 'REMARK 8']
+            available_remark_cols_sp = [c for c in remark_cols_sp if c in df_final_list_sp.columns]
+            
+            if available_remark_cols_sp:
+                def count_taken_sp(row):
+                    return sum(1 for col in available_remark_cols_sp if str(row[col]).strip() not in ['', 'nan', 'None', 'NA'])
+
+                df_followup_sp = df_final_list_sp.copy() 
+                df_followup_sp['FU_TAKEN'] = df_followup_sp.apply(count_taken_sp, axis=1)
+                df_followup_sp['NEXT_DUE'] = df_followup_sp['FU_TAKEN'] + 1
+                
+                df_followup_sp = df_followup_sp[df_followup_sp['FU_TAKEN'] < len(available_remark_cols_sp)]
+                
+                if 'fu_filter_sp' not in st.session_state:
+                    st.session_state['fu_filter_sp'] = "ALL"
+
+                num_buttons_sp = len(available_remark_cols_sp) + 1 
+                f_cols_sp = st.columns(num_buttons_sp)
+                
+                with f_cols_sp[0]:
+                    if st.button(f"ALL PENDING\n({len(df_followup_sp)})", key="fu_all_sp", use_container_width=True, type="primary" if st.session_state['fu_filter_sp'] == "ALL" else "secondary"):
+                        st.session_state['fu_filter_sp'] = "ALL"
+                        st.rerun()
+
+                for i in range(1, num_buttons_sp):
+                    pending_count_sp = len(df_followup_sp[df_followup_sp['NEXT_DUE'] == i])
+                    with f_cols_sp[i]:
+                        label = f"DUE FU {i}\n({pending_count_sp})"
+                        if st.button(label, key=f"fu_sp_{i}", use_container_width=True, type="primary" if st.session_state['fu_filter_sp'] == i else "secondary"):
+                            st.session_state['fu_filter_sp'] = i
+                            st.rerun()
+
+                if st.session_state['fu_filter_sp'] == "ALL":
+                    df_final_display_sp = df_followup_sp.copy()
+                else:
+                    df_final_display_sp = df_followup_sp[df_followup_sp['NEXT_DUE'] == st.session_state['fu_filter_sp']]
+
+                st.info(f"Showing **{st.session_state['status_filter_key_sp']}** Leads where **Follow-up {st.session_state['fu_filter_sp']}** is Pending")
+                
+                display_cols_sp = ['DATE', 'NAME', 'CONTACT', 'MODEL', 'STATUS', 'FU_TAKEN'] + available_remark_cols_sp
+                actual_display_sp = [c for c in display_cols_sp if c in df_final_display_sp.columns]
+                
+                styled_df_sp = df_final_display_sp[actual_display_sp].style.map(
+                    lambda x: 'background-color: #ffcccc; color: #900;' if x == 0 else '', subset=['FU_TAKEN']
+                )
+                
+                st.dataframe(styled_df_sp, use_container_width=True)
+
+                try:
+                    buffer_fu_sp = io.BytesIO()
+                    with pd.ExcelWriter(buffer_fu_sp, engine='openpyxl') as writer:
+                        df_final_display_sp[actual_display_sp].to_excel(writer, index=False, sheet_name='Pending Followups')
+                    
+                    st.download_button(
+                        label=f"⬇️ DOWNLOAD PENDING FU {st.session_state['fu_filter_sp']} AS EXCEL",
+                        data=buffer_fu_sp.getvalue(),
+                        file_name=f"Social_Potato_Pending_FU_{st.session_state['fu_filter_sp']}_{selected_sc_sp}_{st.session_state['status_filter_key_sp']}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_fu_btn_sp"
+                    )
+                except Exception as e:
+                    st.caption("Excel export ready (Requires 'openpyxl' module).")
+            else:
+                st.info("Follow-up analysis ke liye 'REMARK 1' se aage ke columns sheet me hona zaroori hai.")
+        else:
+            st.warning("Social Patato Sheet me data nahi mila.")
+
 
 # ==========================================
 # C. SERVICE DEPARTMENT SECTION
