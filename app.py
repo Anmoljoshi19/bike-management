@@ -803,7 +803,7 @@ elif st.session_state['active_section'] == 'Sales':
         else:
             st.warning("NSC Sheet me data nahi mila.")
 
-with tab_sp:
+    with tab_sp:
         st.subheader("Social Potato Analytics")
         
         sheet_url_sp = "https://docs.google.com/spreadsheets/d/1fQac_iXieFWwvDbI139pQKglc3SqKmVb5f5TTR2Ap1I/edit?gid=1618144995#gid=1618144995"
@@ -1102,7 +1102,6 @@ with tab_sp:
                 st.info("Follow-up analysis ke liye 'REMARK 1' se aage ke columns sheet me hona zaroori hai.")
         else:
             st.warning("Social Patato Sheet me data nahi mila.")
-
 
 # ==========================================
 # C. SERVICE DEPARTMENT SECTION
