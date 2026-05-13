@@ -240,7 +240,7 @@ elif st.session_state['active_section'] == 'Sales':
     
     tab_walkin_ivr, tab_nsc, tab_sp = st.tabs(["📈 WALK IN / IVR", "📈 NSC", "📈 SOCIAL POTATO" ])
     
-    with tab_leads:
+    with tab_walkin_ivr:
         st.subheader("Walk In / IVR Analytics")
         
         sheet_url = "https://docs.google.com/spreadsheets/d/1fQac_iXieFWwvDbI139pQKglc3SqKmVb5f5TTR2Ap1I/edit?gid=739729796#gid=739729796"
