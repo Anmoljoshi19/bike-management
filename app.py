@@ -1511,7 +1511,7 @@ elif st.session_state['active_section'] == 'Service':
         # ==========================================
         elif crm_nav == "📞 Service Calling":
             try:
-                dash_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
+                dash_url = "https://docs.google.com/spreadsheets/d/1V388YGN_b3TPhTELHR2JRKMnM3MR4Oc3lFmsT1gMf2o"
 
                 @st.cache_data(ttl=60)
                 def load_calling_data():
@@ -2047,7 +2047,7 @@ elif st.session_state['active_section'] == 'Service':
     with tab_parked:
         try:
             # 1. LOAD DATA 
-            parked_url = "https://docs.google.com/spreadsheets/d/1Roc_HIQLxsqRoxwCZVEkRgnQ0koe8A7wJOdJBWPWVas"
+            parked_url = "https://docs.google.com/spreadsheets/d/1V388YGN_b3TPhTELHR2JRKMnM3MR4Oc3lFmsT1gMf2o"
             
             @st.cache_data(ttl=60)
             def load_parked_data():
